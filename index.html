@@ -125,6 +125,8 @@
     .pane--right {
       flex: 1;
       min-width: 0;
+      display: flex;
+      flex-direction: column;
     }
 
     /* 编辑器 */
@@ -147,7 +149,8 @@
     /* 右侧 SVG 容器 */
     .preview {
       width: 100%;
-      height: 100%;
+      flex: 1;
+      min-height: 0;
       padding: 16px;
       background: #ffffff;
       overflow: auto;
@@ -156,9 +159,84 @@
       align-items: flex-start;
     }
 
+    .preview__canvas {
+      transform-origin: 0 0;
+      transition: transform 0.15s ease;
+    }
+
     .preview svg {
-      max-width: 100%;
+      display: block;
+      max-width: none;
       height: auto;
+    }
+
+    /* 缩放控制条 */
+    .zoom-bar {
+      flex-shrink: 0;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 0 12px;
+      background: #f6f8fa;
+      border-bottom: 1px solid #d0d7de;
+    }
+
+    .zoom-bar__group {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      background: #ffffff;
+      overflow: hidden;
+    }
+
+    .zoom-btn {
+      height: 28px;
+      min-width: 28px;
+      padding: 0 8px;
+      border: none;
+      background: transparent;
+      color: #1f2328;
+      font-size: 15px;
+      line-height: 1;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s ease;
+    }
+
+    .zoom-btn:hover {
+      background: #eaeef2;
+    }
+
+    .zoom-btn:active {
+      background: #d0d7de;
+    }
+
+    .zoom-btn + .zoom-btn,
+    .zoom-btn__label + .zoom-btn {
+      border-left: 1px solid #d0d7de;
+    }
+
+    .zoom-btn__label {
+      min-width: 56px;
+      padding: 0 6px;
+      height: 28px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      color: #57606a;
+      font-variant-numeric: tabular-nums;
+      user-select: none;
+    }
+
+    .zoom-btn--reset {
+      font-size: 12px;
+      color: #0969da;
     }
 
     .preview__empty,
@@ -263,6 +341,40 @@
 
     <!-- 右侧：SVG 预览容器 -->
     <section class="pane pane--right" id="rightPane">
+      <div class="zoom-bar" id="zoomBar">
+        <div class="zoom-bar__group">
+          <button
+            class="zoom-btn"
+            id="zoomOut"
+            type="button"
+            title="缩小"
+            aria-label="缩小"
+          >
+            −
+          </button>
+          <span class="zoom-btn__label" id="zoomLabel" title="缩放比例"
+            >100%</span
+          >
+          <button
+            class="zoom-btn"
+            id="zoomIn"
+            type="button"
+            title="放大"
+            aria-label="放大"
+          >
+            ＋
+          </button>
+          <button
+            class="zoom-btn zoom-btn--reset"
+            id="zoomReset"
+            type="button"
+            title="重置为 100%"
+            aria-label="重置缩放"
+          >
+            重置
+          </button>
+        </div>
+      </div>
       <div class="preview" id="preview">
         <div class="preview__empty">等待渲染…</div>
       </div>
@@ -285,9 +397,41 @@
       var rightPane = document.getElementById('rightPane');
       var divider = document.getElementById('divider');
       var viewToggle = document.getElementById('viewToggle');
+      var zoomBar = document.getElementById('zoomBar');
+      var zoomIn = document.getElementById('zoomIn');
+      var zoomOut = document.getElementById('zoomOut');
+      var zoomReset = document.getElementById('zoomReset');
+      var zoomLabel = document.getElementById('zoomLabel');
 
       /* ========== 渲染逻辑（与 index.js 的 renderMermaid 浏览器分支一致） ========== */
       var renderToken = 0;
+
+      /* ========== 缩放状态 ========== */
+      var zoomLevel = 1; // 1 = 100%
+      var MIN_ZOOM = 0.2;
+      var MAX_ZOOM = 5;
+      var ZOOM_STEP = 0.1;
+
+      function getSvgCanvas() {
+        return preview.querySelector('.preview__canvas');
+      }
+
+      function applyZoom(level) {
+        zoomLevel = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, level));
+        var canvas = getSvgCanvas();
+        if (canvas) {
+          canvas.style.transform = 'scale(' + zoomLevel + ')';
+        }
+        zoomLabel.textContent = Math.round(zoomLevel * 100) + '%';
+      }
+
+      function resetZoom() {
+        applyZoom(1);
+      }
+
+      function zoomBy(delta) {
+        applyZoom(zoomLevel + delta);
+      }
 
       /**
        * 将 mermaid 文本渲染为 SVG 字符串。
@@ -358,7 +502,11 @@
             // 取其中的 svg 字符串。
             svg = result && result.svg ? result.svg : result;
             if (token !== renderToken) return; // 已有更新请求，丢弃过期结果
-            preview.innerHTML = svg;
+
+            // 渲染新图后重置缩放，并包裹一层画布用于缩放 transform。
+            resetZoom();
+            preview.innerHTML =
+              '<div class="preview__canvas">' + svg + '</div>';
             setStatus('已渲染');
           })
           .catch(function (err) {
@@ -437,6 +585,48 @@
         divider.classList.remove('divider--dragging');
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
+      });
+
+      /* ========== 缩放控件事件绑定 ========== */
+      zoomIn.addEventListener('click', function () {
+        zoomBy(ZOOM_STEP);
+      });
+
+      zoomOut.addEventListener('click', function () {
+        zoomBy(-ZOOM_STEP);
+      });
+
+      zoomReset.addEventListener('click', function () {
+        resetZoom();
+      });
+
+      // 鼠标滚轮缩放：按住 Ctrl/⌘ 滚动时缩放。
+      preview.addEventListener(
+        'wheel',
+        function (e) {
+          if (!e.ctrlKey && !e.metaKey) return;
+          e.preventDefault();
+          zoomBy(e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP);
+        },
+        { passive: false }
+      );
+
+      // 键盘快捷键：+ / - / 0 缩放。
+      document.addEventListener('keydown', function (e) {
+        // 避免在文本编辑框内触发快捷键。
+        var tag = (e.target.tagName || '').toLowerCase();
+        if (tag === 'textarea' || tag === 'input') return;
+
+        if (e.key === '+' || e.key === '=') {
+          e.preventDefault();
+          zoomBy(ZOOM_STEP);
+        } else if (e.key === '-' || e.key === '_') {
+          e.preventDefault();
+          zoomBy(-ZOOM_STEP);
+        } else if (e.key === '0') {
+          e.preventDefault();
+          resetZoom();
+        }
       });
 
       /* ========== 编辑器防抖事件绑定 ========== */
