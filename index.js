@@ -8,12 +8,14 @@
  *  - 点击节点高亮上游/下游
  * 两种能力。支持 CommonJS（Node）与浏览器 <script> 全局两种用法。
  *
+ * 在浏览器中，本模块会自行动态加载 mermaid 构建（默认从
+ * `vendor/mermaid/mermaid.min.js` 加载），HTML 页面只需引入本脚本即可。
+ *
  * 用法一：Node.js
  *   const { renderMermaid, renderToContainer } = require('mermaid-highlighter');
  *   const svg = await renderMermaid('graph TD; A-->B;');
  *
- * 用法二：浏览器
- *   <script src="vendor/mermaid/mermaid.min.js"></script>
+ * 用法二：浏览器（只需引入本文件，无需单独引入 mermaid）
  *   <script src="index.js"></script>
  *   <script>
  *     const diagram = MermaidHighlighter.renderToContainer(
@@ -21,6 +23,9 @@
  *       'graph TD; A-->B; B-->C;'
  *     );
  *   </script>
+ *
+ * 若 mermaid 构建不在默认路径，可通过 options.mermaidUrl 指定：
+ *   MermaidHighlighter.renderToContainer(el, text, { mermaidUrl: '/path/mermaid.min.js' });
  */
 
 /* ============================================================
@@ -37,20 +42,80 @@ function isBrowser() {
   );
 }
 
+/** mermaid.min.js 的默认加载路径（相对当前页面）。 */
+const DEFAULT_MERMAID_URL = 'vendor/mermaid/mermaid.min.js';
+
+/** 模块级 mermaid 加载 Promise（缓存，避免重复加载）。 */
+let mermaidLoadPromise = null;
+
+/**
+ * 在浏览器中通过 <script> 标签动态加载 mermaid.min.js。
+ * @param {string} url mermaid 脚本路径
+ * @returns {Promise<object>} mermaid 实例
+ */
+function loadMermaidFromScript(url) {
+  return new Promise((resolve, reject) => {
+    // 若已经加载过（window.mermaid 已存在），直接使用
+    if (typeof window.mermaid !== 'undefined') {
+      resolve(window.mermaid);
+      return;
+    }
+    // 防止重复注入
+    if (document.querySelector('script[data-mermaid-highlighter-src]')) {
+      // 已有加载中，轮询等待
+      const timer = setInterval(() => {
+        if (typeof window.mermaid !== 'undefined') {
+          clearInterval(timer);
+          resolve(window.mermaid);
+        }
+      }, 50);
+      // 超时保护
+      setTimeout(() => {
+        clearInterval(timer);
+        reject(new Error('加载 mermaid 超时。'));
+      }, 20000);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = url;
+    script.async = true;
+    script.setAttribute('data-mermaid-highlighter-src', 'true');
+    script.onload = () => {
+      if (typeof window.mermaid !== 'undefined') {
+        resolve(window.mermaid);
+      } else {
+        reject(new Error('mermaid 脚本已加载，但未找到 window.mermaid。'));
+      }
+    };
+    script.onerror = () => {
+      reject(new Error('无法加载 mermaid 脚本：' + url));
+    };
+    (document.head || document.documentElement).appendChild(script);
+  });
+}
+
 /**
  * 懒加载 mermaid 库。
- * 浏览器：从全局 `window.mermaid` 获取（由 vendor/mermaid 提供）。
+ * 浏览器：若 `window.mermaid` 已存在则直接使用；否则动态加载 mermaid.min.js。
  * Node：require('mermaid')。
+ * @param {string} [url] mermaid 脚本路径（浏览器动态加载时使用）
  * @returns {Promise<object>}
  */
-async function loadMermaid() {
+async function loadMermaid(url) {
   if (isBrowser()) {
     if (typeof window.mermaid !== 'undefined') {
       return window.mermaid;
     }
-    throw new Error(
-      '未找到 mermaid 实例。请确保已引入 mermaid 并挂载到 window.mermaid。'
-    );
+    // 动态加载 mermaid 构建，URL 由调用方传入或使用默认路径
+    const scriptUrl = url || DEFAULT_MERMAID_URL;
+    if (!mermaidLoadPromise) {
+      mermaidLoadPromise = loadMermaidFromScript(scriptUrl);
+      // 失败后允许下次重试
+      mermaidLoadPromise.catch(() => {
+        mermaidLoadPromise = null;
+      });
+    }
+    return mermaidLoadPromise;
   }
 
   try {
@@ -152,7 +217,8 @@ async function createNodeDom() {
  * 将传入的 mermaid 文本渲染为 SVG 字符串（Node 与浏览器通用）。
  *
  * @param {string} mermaidText mermaid 语法文本（必填，非空）
- * @param {object} [options] 可选，mermaid 初始化配置
+ * @param {object} [options] 可选。mermaid 初始化配置；额外支持 `mermaidUrl`
+ *        用于指定浏览器端动态加载的 mermaid 构建路径。
  * @returns {Promise<string>} 渲染后的完整 SVG 字符串
  * @throws {TypeError} mermaidText 缺失或非字符串时抛出
  */
@@ -172,12 +238,14 @@ async function renderMermaid(mermaidText, options = {}) {
     mermaid = ctx.mermaid;
     injectedKeys = ctx.injectedKeys;
   } else {
-    mermaid = await loadMermaid();
+    mermaid = await loadMermaid(options.mermaidUrl);
   }
 
   try {
     if (mermaid.initialize) {
-      mermaid.initialize({ startOnLoad: false, ...options });
+      // 剔除内部使用的 mermaidUrl 配置，避免传给 mermaid.initialize
+      const { mermaidUrl, ...mermaidConfig } = options;
+      mermaid.initialize({ startOnLoad: false, ...mermaidConfig });
     }
     const result = await mermaid.render('mermaid-svg', mermaidText);
     if (typeof result === 'string') return result;
@@ -201,30 +269,31 @@ async function renderMermaid(mermaidText, options = {}) {
  * 浏览器端：渲染 + 缩放 + 高亮的完整交互模块
  * ============================================================ */
 
-// 模块所需的样式（通过 <style> 自动注入，无需页面额外 CSS）
+// 模块所需的样式（通过 <style> 自动注入，无需页面额外 CSS）。
+// 所有选择器均以传入容器内的 .mermaid-highlighter-canvas 为作用范围。
 const MODULE_CSS = `
   .mermaid-highlighter-canvas {
     display: block;
     transform-origin: 0 0;
     transition: transform 0.15s ease;
   }
-  .mermaid-highlighter-root svg .node {
+  .mermaid-highlighter-canvas svg .node {
     cursor: pointer;
     transition: opacity 0.2s ease;
   }
-  .mermaid-highlighter-root svg .node.is-active .label-container {
+  .mermaid-highlighter-canvas svg .node.is-active .label-container {
     filter: drop-shadow(0 0 3px rgba(47, 129, 247, 0.9));
   }
-  .mermaid-highlighter-root svg .node.is-active {
+  .mermaid-highlighter-canvas svg .node.is-active {
     opacity: 1;
   }
-  .mermaid-highlighter-root svg.is-dimmed .node:not(.is-relevant),
-  .mermaid-highlighter-root svg.is-dimmed .edgePaths .flowchart-link:not(.is-relevant) {
+  .mermaid-highlighter-canvas svg.is-dimmed .node:not(.is-relevant),
+  .mermaid-highlighter-canvas svg.is-dimmed .edgePaths .flowchart-link:not(.is-relevant) {
     opacity: 0.18;
     filter: grayscale(1);
   }
-  .mermaid-highlighter-root svg.is-dimmed .node.is-relevant,
-  .mermaid-highlighter-root svg.is-dimmed .edgePaths .flowchart-link.is-relevant {
+  .mermaid-highlighter-canvas svg.is-dimmed .node.is-relevant,
+  .mermaid-highlighter-canvas svg.is-dimmed .edgePaths .flowchart-link.is-relevant {
     opacity: 1;
     filter: none;
   }
@@ -432,10 +501,8 @@ function createDiagram(container, mermaidText, options) {
   let graphModel = null;
   let renderToken = 0;
 
-  // 容器的根包装元素
-  const root = document.createElement('div');
-  root.className = 'mermaid-highlighter-root';
-  container.appendChild(root);
+  // 直接渲染到传入的容器 DOM。用 root 指向容器自身，所有渲染/查询都在容器内进行。
+  const root = container;
 
   // ---- 渲染 ----
   async function render(text, renderOptions) {
@@ -445,11 +512,14 @@ function createDiagram(container, mermaidText, options) {
       return null;
     }
     const token = ++renderToken;
-    const svgText = await renderMermaid(text, renderOptions || cfg.mermaid);
+    // mermaidUrl 可在每次渲染时覆盖
+    const merged = Object.assign({}, cfg, renderOptions || {});
+    const svgText = await renderMermaid(text, merged);
     if (token !== renderToken) return null; // 已有更新请求，丢弃过期结果
     if (!root.isConnected) return null;
 
     resetZoom();
+    // 渲染到传入的 DOM：清空容器并写入画布 + SVG
     root.innerHTML = '<div class="mermaid-highlighter-canvas">' + svgText + '</div>';
     setupHighlight(text);
     if (cfg.onRendered) cfg.onRendered(getSvg());
@@ -723,7 +793,9 @@ function createDiagram(container, mermaidText, options) {
       svg.removeEventListener('click', handleNodeClick);
     }
     root.removeEventListener('wheel', onPreviewWheel);
-    if (root.parentNode) root.parentNode.removeChild(root);
+    // 仅清空容器内容与实例状态，不删除传入的容器 DOM。
+    root.innerHTML = '';
+    graphModel = null;
   }
 
   // 绑定容器级滚轮缩放（Ctrl/⌘ + 滚轮）

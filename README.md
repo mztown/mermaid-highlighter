@@ -31,7 +31,8 @@ const svg = await renderMermaid('graph TD;\n A-->B;', { theme: 'dark' });
 
 ## 环境支持
 
-- **浏览器**：直接使用全局 `window.mermaid` 渲染，无需 `jsdom`。
+- **浏览器**：模块会**自行动态加载 mermaid**（默认从 `vendor/mermaid/mermaid.min.js` 加载），
+  无需在 HTML 中单独引入 mermaid 脚本；直接使用传入容器对应的 DOM 渲染。
 - **Node.js（服务端）**：自动通过 `jsdom` 创建 DOM 环境进行渲染（需安装 `jsdom`），
   渲染完成后会自动清理注入的全局对象，避免影响同进程内其他代码。
 
@@ -40,19 +41,21 @@ const svg = await renderMermaid('graph TD;\n A-->B;', { theme: 'dark' });
 ### `renderMermaid(mermaidText, options?)`
 
 - `mermaidText` `<string>`：mermaid 语法文本（必填，非空，否则抛出 `TypeError`）。
-- `options` `<object>`：可选，mermaid 初始化配置。
+- `options` `<object>`：可选，mermaid 初始化配置；额外支持 `mermaidUrl` 指定浏览器端
+  mermaid 构建的加载路径（默认 `vendor/mermaid/mermaid.min.js`）。
 - 返回：`<Promise<string>>` 渲染后的完整 SVG 字符串。
 - 说明：mermaid v11 的 `render` 返回 `{ svg, diagramType, bindFunctions }` 对象，
   本方法已归一化为直接返回其中的 `svg` 字符串。
 
 ### `renderToContainer(container, mermaidText, options?)`（浏览器）
 
-在指定容器内渲染一个**可缩放、可交互高亮**的 mermaid 图。任意 HTML 页面只需引入
-`index.js`（并确保 `window.mermaid` 可用）即可使用。
+**直接用传入的 mermaid 文本渲染传入的 DOM**，生成一个可缩放、可交互高亮的 mermaid 图。
+任意 HTML 页面**只需引入 `index.js`**（无需单独引入 mermaid）即可使用。
 
-- `container` `<HTMLElement>`：目标容器元素。
+- `container` `<HTMLElement>`：目标容器元素，渲染结果直接写入该元素。
 - `mermaidText` `<string>`：mermaid 文本。
 - `options` `<object>`：可选配置，支持：
+  - `mermaidUrl`：mermaid 构建加载路径（默认 `vendor/mermaid/mermaid.min.js`）
   - `onZoomChange(level)`：缩放比例变化回调
   - `onRendered(svg)`：渲染完成回调
   - `onError(message)`：渲染出错回调
@@ -61,15 +64,17 @@ const svg = await renderMermaid('graph TD;\n A-->B;', { theme: 'dark' });
   - `getSvg()`：获取当前 SVG 元素
   - `zoomIn()` / `zoomOut()` / `resetZoom()` / `setZoom(level)` / `getZoom()`：缩放控制
   - `highlightNode(nodeId)` / `clearHighlight()`：点击高亮控制
-  - `destroy()`：销毁实例并移除事件监听
+  - `destroy()`：销毁实例并清理内容
 
-浏览器用法示例：
+浏览器用法示例（HTML 页面只需引入 `index.js`）：
 
 ```html
-<!-- 引入 mermaid 与 index.js -->
-<script src="vendor/mermaid/mermaid.min.js"></script>
+<div id="container" style="width: 600px; height: 400px;"></div>
+
+<!-- 只需引入 index.js，mermaid 会被自动加载 -->
 <script src="index.js"></script>
 <script>
+  // 传入容器 + mermaid 文本，容器即被渲染为可缩放、可交互高亮的图表
   const diagram = MermaidHighlighter.renderToContainer(
     document.getElementById('container'),
     'graph TD;\n  A --> B;\n  B --> C;'
@@ -108,9 +113,11 @@ const svg = await renderMermaid('graph TD;\n A-->B;', { theme: 'dark' });
 ### 离线资源
 
 mermaid 浏览器构建已本地化到 `vendor/mermaid/`（`mermaid.min.js` + `chunks/`），
-不再依赖 CDN。`mermaid.min.js` 为自包含的 esbuild IIFE 产物，末尾会自动将
-mermaid 挂到 `globalThis.mermaid`（即 `window.mermaid`），`index.js` 的浏览器
-分支可直接命中，无需额外脚本。
+不再依赖 CDN。`index.js` 在浏览器中会**自动**通过 `<script>` 标签加载该构建，
+因此 HTML 页面无需手动引入 mermaid 脚本。
+
+> 若 mermaid 构建位于其他路径，可通过 `options.mermaidUrl` 指定，例如：
+> `MermaidHighlighter.renderToContainer(el, text, { mermaidUrl: '/js/mermaid.min.js' })`
 
 > 已包含的 `vendor/mermaid` 来自 `node_modules/mermaid/dist`，如需重新生成：
 > `Copy-Item node_modules/mermaid/dist/mermaid.min.js, node_modules/mermaid/dist/chunks -Destination vendor/mermaid -Recurse`
