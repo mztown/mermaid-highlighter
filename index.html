@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mermaid Highlighter</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html,
+    body {
+      height: 100%;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: #1f2328;
+      background: #f6f8fa;
+    }
+
+    /* ---------- 顶部工具栏 ---------- */
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 48px;
+      padding: 0 16px;
+      background: #24292f;
+      color: #f6f8fa;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+      position: relative;
+      z-index: 10;
+      flex-shrink: 0;
+    }
+
+    .toolbar__title {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+
+    .toolbar__actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      font-size: 13px;
+      line-height: 1;
+      color: #f6f8fa;
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease;
+      user-select: none;
+    }
+
+    .btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.4);
+    }
+
+    .btn--active {
+      background: #2f81f7;
+      border-color: #2f81f7;
+      color: #fff;
+    }
+
+    .btn--active:hover {
+      background: #1f6feb;
+      border-color: #1f6feb;
+    }
+
+    .btn-group {
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .btn-group .btn {
+      border: none;
+      border-radius: 0;
+      border-right: 1px solid rgba(255, 255, 255, 0.25);
+    }
+
+    .btn-group .btn:last-child {
+      border-right: none;
+    }
+
+    .toolbar__status {
+      font-size: 12px;
+      color: #8b949e;
+      margin-right: 8px;
+      min-width: 120px;
+      text-align: right;
+    }
+
+    /* ---------- 主区域布局 ---------- */
+    .main {
+      display: flex;
+      height: calc(100% - 48px);
+      position: relative;
+    }
+
+    .pane {
+      overflow: auto;
+      position: relative;
+    }
+
+    .pane--left {
+      flex-shrink: 0;
+    }
+
+    .pane--right {
+      flex: 1;
+      min-width: 0;
+    }
+
+    /* 编辑器 */
+    .editor {
+      width: 100%;
+      height: 100%;
+      resize: none;
+      border: none;
+      outline: none;
+      padding: 16px;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo,
+        monospace;
+      font-size: 14px;
+      line-height: 1.6;
+      color: #1f2328;
+      background: #ffffff;
+      tab-size: 2;
+    }
+
+    /* 右侧 SVG 容器 */
+    .preview {
+      width: 100%;
+      height: 100%;
+      padding: 16px;
+      background: #ffffff;
+      overflow: auto;
+      display: flex;
+      justify-content: flex-start;
+      align-items: flex-start;
+    }
+
+    .preview svg {
+      max-width: 100%;
+      height: auto;
+    }
+
+    .preview__empty,
+    .preview__error {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #8b949e;
+      font-size: 14px;
+      gap: 8px;
+    }
+
+    .preview__error {
+      color: #d1242f;
+    }
+
+    .preview__spinner {
+      width: 28px;
+      height: 28px;
+      border: 3px solid #d0d7de;
+      border-top-color: #2f81f7;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* 拖拽分隔条 */
+    .divider {
+      width: 6px;
+      cursor: col-resize;
+      background: #d0d7de;
+      transition: background 0.15s ease;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 5;
+    }
+
+    .divider:hover,
+    .divider--dragging {
+      background: #2f81f7;
+    }
+
+    /* 隐藏分隔条（单栏模式） */
+    .divider--hidden {
+      display: none;
+    }
+
+    .pane--hidden {
+      display: none;
+    }
+
+    /* 全屏单栏时让另一侧占据全部 */
+    .main--solo .pane--left,
+    .main--solo .pane--right {
+      flex: 1;
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <!-- 顶部工具栏 -->
+  <header class="toolbar">
+    <div class="toolbar__title">Mermaid Highlighter</div>
+    <div class="toolbar__actions">
+      <span class="toolbar__status" id="status">就绪</span>
+      <div class="btn-group" id="viewToggle" role="group" aria-label="视图模式">
+        <button class="btn btn--active" type="button" data-mode="both">
+          分栏
+        </button>
+        <button class="btn" type="button" data-mode="left">仅左侧</button>
+        <button class="btn" type="button" data-mode="right">仅右侧</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 主区域 -->
+  <div class="main" id="main">
+    <!-- 左侧：文本编辑器 -->
+    <section class="pane pane--left" id="leftPane">
+      <textarea
+        id="editor"
+        class="editor"
+        spellcheck="false"
+        placeholder="在此输入 mermaid 文本，例如：&#10;graph TD;&#10;  A-->B;&#10;  B-->C;&#10;停止输入 2 秒后自动渲染到右侧。"
+      >graph TD;
+  A[开始] --> B{是否完成?}
+  B -->|是| C[结束]
+  B -->|否| A
+      </textarea>
+    </section>
+
+    <!-- 拖拽分隔条 -->
+    <div class="divider" id="divider" title="拖拽调整比例"></div>
+
+    <!-- 右侧：SVG 预览容器 -->
+    <section class="pane pane--right" id="rightPane">
+      <div class="preview" id="preview">
+        <div class="preview__empty">等待渲染…</div>
+      </div>
+    </section>
+  </div>
+
+  <!-- mermaid 浏览器构建（离线，本地 vendor） -->
+  <script src="vendor/mermaid/mermaid.min.js"></script>
+
+  <script>
+    (function () {
+      'use strict';
+
+      /* ========== DOM 引用 ========== */
+      var editor = document.getElementById('editor');
+      var preview = document.getElementById('preview');
+      var status = document.getElementById('status');
+      var main = document.getElementById('main');
+      var leftPane = document.getElementById('leftPane');
+      var rightPane = document.getElementById('rightPane');
+      var divider = document.getElementById('divider');
+      var viewToggle = document.getElementById('viewToggle');
+
+      /* ========== 渲染逻辑（与 index.js 的 renderMermaid 浏览器分支一致） ========== */
+      var renderToken = 0;
+
+      /**
+       * 将 mermaid 文本渲染为 SVG 字符串。
+       * 浏览器环境下直接使用全局 window.mermaid（由 mermaid.min.js 挂载）。
+       * @param {string} text mermaid 文本
+       * @param {object} [options] mermaid 初始化配置
+       * @returns {Promise<string>} SVG 字符串
+       */
+      function renderMermaid(text, options) {
+        // initialize 为同步方法，返回 undefined，需先调用再渲染。
+        window.mermaid.initialize({
+          startOnLoad: false,
+          ...(options || {}),
+        });
+        return window.mermaid.render('mermaid-svg', text);
+      }
+
+      /* ========== 防抖渲染（停止输入 2 秒后触发） ========== */
+      var debounceTimer = null;
+      var DEBOUNCE_MS = 2000;
+
+      function scheduleRender() {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(renderCurrent, DEBOUNCE_MS);
+      }
+
+      function renderCurrent() {
+        var text = editor.value;
+        if (!text || !text.trim()) {
+          renderEmpty('等待渲染…');
+          return;
+        }
+        renderIntoPreview(text);
+      }
+
+      function renderEmpty(message) {
+        preview.innerHTML =
+          '<div class="preview__empty">' + escapeHtml(message) + '</div>';
+      }
+
+      function renderError(message) {
+        preview.innerHTML =
+          '<div class="preview__error">渲染失败：' + escapeHtml(message) + '</div>';
+      }
+
+      function renderSpinner() {
+        preview.innerHTML =
+          '<div class="preview__spinner"></div>';
+      }
+
+      function escapeHtml(str) {
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      function renderIntoPreview(text) {
+        var token = ++renderToken;
+        setStatus('渲染中…');
+        renderSpinner();
+
+        var svg;
+        renderMermaid(text)
+          .then(function (result) {
+            // mermaid v11 的 render 返回 { svg, diagramType, bindFunctions }，
+            // 取其中的 svg 字符串。
+            svg = result && result.svg ? result.svg : result;
+            if (token !== renderToken) return; // 已有更新请求，丢弃过期结果
+            preview.innerHTML = svg;
+            setStatus('已渲染');
+          })
+          .catch(function (err) {
+            if (token !== renderToken) return;
+            console.error(err);
+            renderError(err && err.message ? err.message : String(err));
+            setStatus('渲染失败');
+          });
+      }
+
+      function setStatus(text) {
+        status.textContent = text;
+      }
+
+      /* ========== 视图模式切换（分栏 / 仅左侧 / 仅右侧） ========== */
+      function setViewMode(mode) {
+        // 更新按钮高亮
+        Array.prototype.forEach.call(
+          viewToggle.querySelectorAll('.btn'),
+          function (btn) {
+            btn.classList.toggle(
+              'btn--active',
+              btn.getAttribute('data-mode') === mode
+            );
+          }
+        );
+
+        var showLeft = mode === 'both' || mode === 'left';
+        var showRight = mode === 'both' || mode === 'right';
+        var solo = mode === 'left' || mode === 'right';
+
+        leftPane.classList.toggle('pane--hidden', !showLeft);
+        rightPane.classList.toggle('pane--hidden', !showRight);
+        divider.classList.toggle('divider--hidden', solo);
+        main.classList.toggle('main--solo', solo);
+
+        // 单栏模式恢复默认尺寸，避免隐藏的分隔条比例残留
+        if (solo) {
+          main.style.setProperty('--left-ratio', null);
+          leftPane.style.flexBasis = '';
+        }
+
+        renderCurrent(); // 单栏切换后立即重绘
+      }
+
+      viewToggle.addEventListener('click', function (e) {
+        var btn = e.target.closest('.btn');
+        if (!btn) return;
+        setViewMode(btn.getAttribute('data-mode'));
+      });
+
+      /* ========== 分隔条拖拽调整比例 ========== */
+      var isDragging = false;
+
+      divider.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        isDragging = true;
+        divider.classList.add('divider--dragging');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+      });
+
+      document.addEventListener('mousemove', function (e) {
+        if (!isDragging) return;
+        var rect = main.getBoundingClientRect();
+        var ratio = (e.clientX - rect.left) / rect.width;
+        // 限制比例范围 15% ~ 85%
+        ratio = Math.min(0.85, Math.max(0.15, ratio));
+        leftPane.style.flexBasis = ratio * 100 + '%';
+        main.style.setProperty('--left-ratio', ratio);
+      });
+
+      document.addEventListener('mouseup', function () {
+        if (!isDragging) return;
+        isDragging = false;
+        divider.classList.remove('divider--dragging');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      });
+
+      /* ========== 编辑器防抖事件绑定 ========== */
+      editor.addEventListener('input', scheduleRender);
+
+      /* ========== 初始化 ========== */
+      // 初始默认 50% 分栏
+      leftPane.style.flexBasis = '50%';
+
+      // 首次渲染
+      renderCurrent();
+    })();
+  </script>
+</body>
+</html>

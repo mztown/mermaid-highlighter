@@ -1,0 +1,22 @@
+{
+  "name": "mermaid-highlighter",
+  "version": "1.0.0",
+  "description": "Baked function set to highlight up-stream down-stream nodes in a rendered mermaid flowchart",
+  "keywords": [
+    "mermaid",
+    "highlighter"
+  ],
+  "license": "MIT",
+  "author": "maurice.t",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "mermaid": "^11.4.1"
+  },
+  "optionalDependencies": {
+    "jsdom": "^25.0.1"
+  }
+}
