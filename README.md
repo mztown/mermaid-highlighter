@@ -45,9 +45,52 @@ const svg = await renderMermaid('graph TD;\n A-->B;', { theme: 'dark' });
 - 说明：mermaid v11 的 `render` 返回 `{ svg, diagramType, bindFunctions }` 对象，
   本方法已归一化为直接返回其中的 `svg` 字符串。
 
+### `renderToContainer(container, mermaidText, options?)`（浏览器）
+
+在指定容器内渲染一个**可缩放、可交互高亮**的 mermaid 图。任意 HTML 页面只需引入
+`index.js`（并确保 `window.mermaid` 可用）即可使用。
+
+- `container` `<HTMLElement>`：目标容器元素。
+- `mermaidText` `<string>`：mermaid 文本。
+- `options` `<object>`：可选配置，支持：
+  - `onZoomChange(level)`：缩放比例变化回调
+  - `onRendered(svg)`：渲染完成回调
+  - `onError(message)`：渲染出错回调
+- 返回：`<object>` 控制句柄，包含：
+  - `render(text)` / `update(text)`：重新渲染
+  - `getSvg()`：获取当前 SVG 元素
+  - `zoomIn()` / `zoomOut()` / `resetZoom()` / `setZoom(level)` / `getZoom()`：缩放控制
+  - `highlightNode(nodeId)` / `clearHighlight()`：点击高亮控制
+  - `destroy()`：销毁实例并移除事件监听
+
+浏览器用法示例：
+
+```html
+<!-- 引入 mermaid 与 index.js -->
+<script src="vendor/mermaid/mermaid.min.js"></script>
+<script src="index.js"></script>
+<script>
+  const diagram = MermaidHighlighter.renderToContainer(
+    document.getElementById('container'),
+    'graph TD;\n  A --> B;\n  B --> C;'
+  );
+  // 手动触发重新渲染
+  diagram.render('graph LR;\n  X --> Y;');
+  // 缩放
+  diagram.zoomIn();
+  // 高亮指定节点（其上下游）
+  diagram.highlightNode('B');
+</script>
+```
+
+> 说明：`renderToContainer` 仅在浏览器环境可用；Node 环境请使用 `renderMermaid`。
+
 ## 可视化编辑页面（`index.html`）
 
 页面为离线可用的编辑器，核心交互如下：
+
+- 右侧 SVG 的**渲染 / 缩放 / 点击高亮**均委托给 `index.js` 的
+  `renderToContainer`，页面本身只负责布局与编辑器交互。
 
 - **顶部工具栏**：标题 + 状态提示 + 视图模式切换按钮（分栏 / 仅左侧 / 仅右侧）。
 - **左右分栏**：中间分隔条可拖拽调整两侧比例（限制在 15% ~ 85% 之间）。

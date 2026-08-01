@@ -146,7 +146,7 @@
       tab-size: 2;
     }
 
-    /* 右侧 SVG 容器 */
+    /* 右侧 SVG 容器（渲染内容由 index.js 管理） */
     .preview {
       width: 100%;
       flex: 1;
@@ -157,11 +157,6 @@
       display: flex;
       justify-content: flex-start;
       align-items: flex-start;
-    }
-
-    .preview__canvas {
-      transform-origin: 0 0;
-      transition: transform 0.15s ease;
     }
 
     .preview svg {
@@ -237,66 +232,6 @@
     .zoom-btn--reset {
       font-size: 12px;
       color: #0969da;
-    }
-
-    /* ========== 节点点击高亮（graph/flowchart） ========== */
-    .preview svg .node {
-      cursor: pointer;
-      transition: opacity 0.2s ease;
-    }
-
-    /* 被选中高亮：保持原色并加描边突出 */
-    .preview svg .node.is-active .label-container {
-      filter: drop-shadow(0 0 3px rgba(47, 129, 247, 0.9));
-    }
-    .preview svg .node.is-active {
-      opacity: 1;
-    }
-
-    /* 非关联节点与连线：浅灰色 + 降低不透明度 */
-    .preview svg.is-dimmed .node:not(.is-relevant),
-    .preview svg.is-dimmed .edgePaths .flowchart-link:not(.is-relevant) {
-      opacity: 0.18;
-      filter: grayscale(1);
-    }
-
-    /* 关联的节点与连线保持清晰 */
-    .preview svg.is-dimmed .node.is-relevant,
-    .preview svg.is-dimmed .edgePaths .flowchart-link.is-relevant {
-      opacity: 1;
-      filter: none;
-    }
-
-    .preview__empty,
-    .preview__error {
-      width: 100%;
-      height: 100%;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      color: #8b949e;
-      font-size: 14px;
-      gap: 8px;
-    }
-
-    .preview__error {
-      color: #d1242f;
-    }
-
-    .preview__spinner {
-      width: 28px;
-      height: 28px;
-      border: 3px solid #d0d7de;
-      border-top-color: #2f81f7;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-    }
-
-    @keyframes spin {
-      to {
-        transform: rotate(360deg);
-      }
     }
 
     /* 拖拽分隔条 */
@@ -403,18 +338,24 @@
           </button>
         </div>
       </div>
-      <div class="preview" id="preview">
-        <div class="preview__empty">等待渲染…</div>
-      </div>
+      <div class="preview" id="preview"></div>
     </section>
   </div>
 
   <!-- mermaid 浏览器构建（离线，本地 vendor） -->
   <script src="vendor/mermaid/mermaid.min.js"></script>
+  <!-- mermaid-highlighter 独立模块（提供渲染 / 缩放 / 高亮能力） -->
+  <script src="index.js"></script>
 
   <script>
     (function () {
       'use strict';
+
+      var M = window.MermaidHighlighter;
+      if (!M) {
+        console.error('MermaidHighlighter 未加载，请确认 index.js 已正确引入。');
+        return;
+      }
 
       /* ========== DOM 引用 ========== */
       var editor = document.getElementById('editor');
@@ -425,555 +366,70 @@
       var rightPane = document.getElementById('rightPane');
       var divider = document.getElementById('divider');
       var viewToggle = document.getElementById('viewToggle');
-      var zoomBar = document.getElementById('zoomBar');
       var zoomIn = document.getElementById('zoomIn');
       var zoomOut = document.getElementById('zoomOut');
       var zoomReset = document.getElementById('zoomReset');
       var zoomLabel = document.getElementById('zoomLabel');
 
-      /* ========== 渲染逻辑（与 index.js 的 renderMermaid 浏览器分支一致） ========== */
-      var renderToken = 0;
-
-      /* ========== 缩放状态 ========== */
-      var zoomLevel = 1; // 1 = 100%
-      var MIN_ZOOM = 0.2;
-      var MAX_ZOOM = 5;
-      var ZOOM_STEP = 0.1;
-
-      function getSvgCanvas() {
-        return preview.querySelector('.preview__canvas');
-      }
-
-      /* ========== 点击节点高亮（graph/flowchart） ========== */
-      // 当前图的解析结构；null 表示非 flowchart 图
-      var graphModel = null;
-
-      /**
-       * 解析 mermaid 文本，判断是否为 flowchart 并提取节点与边。
-       * 兼容所有节点形状、纯 id 节点、连线注释、以及连线/注释前后有无空格。
-       * @param {string} text
-       * @returns {{ isFlowchart: boolean, nodes: string[], edges: Array<[string,string]> }}
-       */
-      function parseFlowchart(text) {
-        if (typeof text !== 'string') {
-          return { isFlowchart: false, nodes: [], edges: [] };
-        }
-        var firstLine = (text.split('\n')[0] || '').trim();
-        var isFlowchart = /^(graph|flowchart)\b/.test(firstLine);
-        if (!isFlowchart) {
-          return { isFlowchart: false, nodes: [], edges: [] };
-        }
-
-        var nodes = {};
-        var edges = [];
-
-        // 匹配连线符号（长优先，避免 --> 被拆成 --）
-        var linkSyms = [
-          '--->', '-->', '---', '--',
-          '-.->', '-.-', '-.', '.->', '.-',
-          '==>', '===', '==',
-        ];
-        function matchLinkSymbol(s, pos) {
-          for (var k = 0; k < linkSyms.length; k++) {
-            if (s.slice(pos, pos + linkSyms[k].length) === linkSyms[k]) {
-              return linkSyms[k].length;
-            }
-          }
-          return 0;
-        }
-
-        // 从端点 token 提取节点 id（去掉形状与 inline 标签）
-        function extractNodeId(token) {
-          var t = (token || '').trim();
-          if (!t) return '';
-          // 去掉开头的 inline 标签 |text|
-          while (t.charAt(0) === '|') {
-            var end = t.indexOf('|', 1);
-            if (end === -1) break;
-            t = t.slice(end + 1).trim();
-          }
-          var m = /^[A-Za-z0-9_\u00a0-\uffff.]+/.exec(t);
-          return m ? m[0] : '';
-        }
-
-        // 解析一行是否为边语句，返回 [source, target] 或 null
-        // 判断连线符号是否为“开符号”（不完整，标志注释文本开始）。
-        // 例如 `-- text -->` 中的 `--`、`== text ==>` 中的 `==`。
-        var openSymbols = { '--': true, '-.': true, '==': true };
-
-        /**
-         * 解析一行边语句，支持链式边（如 D --> C --> E 拆成 D->C 与 C->E）。
-         * 兼容连线注释（-- text --> 等）与连线/注释前后有无空格。
-         * @param {string} line
-         * @returns {Array<[string,string]>} 边列表；非边语句返回空数组
-         */
-        function tryParseEdge(line) {
-          var open = '([{<';
-          var close = ')]}>';
-          var depth = 0;
-          var positions = []; // 每个连线符号：{start, len, sym}
-          var i = 0;
-          var n = line.length;
-          while (i < n) {
-            var ch = line[i];
-            if (depth === 0) {
-              var len = matchLinkSymbol(line, i);
-              if (len > 0) {
-                positions.push({ start: i, len: len, sym: line.slice(i, i + len) });
-                i += len;
-                continue;
-              }
-            }
-            var oi = open.indexOf(ch);
-            if (oi !== -1) {
-              depth++;
-            } else {
-              var ci = close.indexOf(ch);
-              if (ci !== -1) depth = Math.max(0, depth - 1);
-            }
-            i++;
-          }
-          if (positions.length === 0) return [];
-
-          // 按符号把语句切成节点候选段：
-          // [0..s1] [s1..s2] ... [sN..end]
-          var segments = [];
-          segments.push(line.slice(0, positions[0].start));
-          for (var k = 0; k < positions.length - 1; k++) {
-            segments.push(
-              line.slice(
-                positions[k].start + positions[k].len,
-                positions[k + 1].start
-              )
-            );
-          }
-          segments.push(line.slice(positions[positions.length - 1].start + positions[positions.length - 1].len));
-
-          // 判断某个中间段是否为“注释文本”而非节点。
-          // 规则：若左侧符号是开符号（-- / -. / ==）且右侧符号是完整符号，则中间是注释。
-          var isComment = {};
-          for (var c = 1; c < positions.length; c++) {
-            var leftSym = positions[c - 1].sym;
-            var rightSym = positions[c].sym;
-            if (openSymbols[leftSym] && !openSymbols[rightSym]) {
-              isComment[c] = true; // segments[c] 是注释
-            }
-          }
-
-          // 提取每个节点段的节点 id；注释段视为无节点
-          var nodeIds = [];
-          for (var s = 0; s < segments.length; s++) {
-            if (isComment[s]) {
-              nodeIds.push(null);
-            } else {
-              nodeIds.push(extractNodeId(segments[s]));
-            }
-          }
-
-          // 相邻两个真实节点段之间生成一条边
-          var edges = [];
-          var prevNode = null;
-          for (var idx = 0; idx < nodeIds.length; idx++) {
-            var nid = nodeIds[idx];
-            if (nid) {
-              if (prevNode !== null) {
-                edges.push([prevNode, nid]);
-              }
-              prevNode = nid;
-            }
-          }
-          return edges;
-        }
-
-        // 去除 %% 行注释后按 ; 或换行分句
-        var statements = text
-          .split('\n')
-          .map(function (l) {
-            return l.replace(/%%.*$/, '');
-          })
-          .join('\n')
-          .split(/[;\n]/);
-
-        for (var si = 0; si < statements.length; si++) {
-          var stmt = (statements[si] || '').trim();
-          if (!stmt) continue;
-          if (
-            /^(graph|flowchart)\b/.test(stmt) ||
-            /^subgraph\b/.test(stmt) ||
-            /^end\b/.test(stmt) ||
-            /^(style|classDef|class|click|linkStyle|direction)\b/.test(stmt)
-          ) {
-            continue;
-          }
-          var edgeList = tryParseEdge(stmt);
-          for (var ei = 0; ei < edgeList.length; ei++) {
-            var edge = edgeList[ei];
-            nodes[edge[0]] = true;
-            nodes[edge[1]] = true;
-            edges.push(edge);
-          }
-        }
-
-        return { isFlowchart: true, nodes: Object.keys(nodes), edges: edges };
-      }
-
-      /**
-       * 渲染完成后初始化点击高亮：
-       * 建立 节点id -> SVG 节点元素、边 -> SVG 连线元素 的映射，并绑定点击事件。
-       */
-      function setupHighlight() {
-        var svg = preview.querySelector('svg');
-        clearHighlight();
-        if (!svg) return;
-
-        var graph = parseFlowchart(editor.value);
-        if (!graph.isFlowchart) {
-          graphModel = null;
-          return;
-        }
-        graphModel = graph;
-
-        var nodeIdSet = {};
-        graph.nodes.forEach(function (id) {
-          nodeIdSet[id] = true;
-        });
-
-        // 建立 节点id -> SVG 节点 g 元素 映射
-        var nodeMap = {};
-        var nodeEls = svg.querySelectorAll('g.node');
-        for (var i = 0; i < nodeEls.length; i++) {
-          var g = nodeEls[i];
-          var gid = g.getAttribute('id') || '';
-          // id 形如 mermaid-svg-flowchart-{节点id}-{索引}
-          var m = /flowchart-([\s\S]+)-(\d+)$/.exec(gid);
-          if (!m) continue;
-          var nodeId = m[1];
-          // 仅保留解析器中出现的节点，避免子元素误匹配
-          if (!nodeIdSet[nodeId]) continue;
-          if (!nodeMap[nodeId]) {
-            nodeMap[nodeId] = [];
-          }
-          nodeMap[nodeId].push(g);
-        }
-
-        // 建立 边 -> SVG 连线 path 元素 映射（通过 data-id 与解析边匹配）
-        var edgePaths = [];
-        var paths = svg.querySelectorAll('path[data-edge="true"]');
-        for (var j = 0; j < paths.length; j++) {
-          var p = paths[j];
-          var did = p.getAttribute('data-id') || '';
-          // data-id 形如 L_{src}_{dst}_{idx}，去掉前缀和末尾索引
-          var part = did.replace(/^L_/, '').replace(/_\d+$/, '');
-          edgePaths.push({ path: p, key: part, raw: did });
-        }
-
-        // 存储映射，供点击事件使用
-        graphModel.nodeMap = nodeMap;
-        graphModel.edgePaths = edgePaths;
-
-        // 绑定点击事件（委托到 svg 层，性能更好）
-        svg.removeEventListener('click', handleNodeClick);
-        svg.addEventListener('click', handleNodeClick);
-      }
-
-      /**
-       * 处理节点点击：向上游/下游查找所有关联节点与连线并高亮。
-       * 点击空白处或再次点击同一节点可取消高亮。
-       */
-      function handleNodeClick(e) {
-        if (!graphModel) return;
-
-        // 找到被点击的节点 g 元素
-        var g = e.target.closest
-          ? e.target.closest('g.node')
-          : findAncestorNode(e.target);
-
-        // 点击空白区域（非节点）→ 取消高亮
-        if (!g) {
-          clearHighlight();
-          return;
-        }
-
-        // 由 SVG 元素 id 反查节点 id
-        var gid = g.getAttribute('id') || '';
-        var m = /flowchart-([\s\S]+)-(\d+)$/.exec(gid);
-        if (!m) return;
-        var clickedNode = m[1];
-
-        // 再次点击当前选中节点 → 取消高亮
-        if (
-          preview.querySelector('svg.is-dimmed') &&
-          g.classList.contains('is-active')
-        ) {
-          clearHighlight();
-          return;
-        }
-
-        highlightFrom(clickedNode);
-      }
-
-      function findAncestorNode(el) {
-        while (el && el.tagName !== 'SVG') {
-          if (el.getAttribute && (el.getAttribute('class') || '').split(/\s+/).indexOf('node') !== -1) {
-            return el;
-          }
-          el = el.parentNode;
-        }
-        return null;
-      }
-
-      /**
-       * 从指定节点出发，向上游（指向它）和下游（它指向的）查找所有关联节点与连线。
-       */
-      function highlightFrom(startNodeId) {
-        // 先恢复所有节点与连线的原始状态，再进行高亮计算，
-        // 避免上一次高亮（is-active / is-relevant / is-dimmed）残留。
-        clearHighlight();
-
-        var graph = graphModel;
-        // 邻接表
-        var outAdj = {}; // 节点 -> [目标节点]
-        var inAdj = {}; //  节点 -> [来源节点]
-        var edgeMap = {}; // key "src>dst" -> true，用于判断连线关联
-
-        graph.edges.forEach(function (e) {
-          var s = e[0];
-          var t = e[1];
-          if (!outAdj[s]) outAdj[s] = [];
-          outAdj[s].push(t);
-          if (!inAdj[t]) inAdj[t] = [];
-          inAdj[t].push(s);
-          edgeMap[s + '>' + t] = true;
-        });
-
-        var relevantNodes = {};
-        var relevantEdges = {};
-
-        // BFS 遍历上游
-        var visitedUp = {};
-        var queueUp = [startNodeId];
-        visitedUp[startNodeId] = true;
-        while (queueUp.length) {
-          var cur = queueUp.shift();
-          var ups = inAdj[cur] || [];
-          for (var u = 0; u < ups.length; u++) {
-            var src = ups[u];
-            if (!visitedUp[src]) {
-              visitedUp[src] = true;
-              queueUp.push(src);
-            }
-            // 记录经过的边 src -> cur
-            if (edgeMap[src + '>' + cur]) {
-              relevantEdges[src + '>' + cur] = true;
-            }
-          }
-        }
-        // 上游遍历中经过的边已被记录；还需记录上游内部传递过程中的边
-
-        // BFS 遍历下游
-        var visitedDown = {};
-        var queueDown = [startNodeId];
-        visitedDown[startNodeId] = true;
-        while (queueDown.length) {
-          var cur2 = queueDown.shift();
-          var downs = outAdj[cur2] || [];
-          for (var d = 0; d < downs.length; d++) {
-            var tgt = downs[d];
-            if (edgeMap[cur2 + '>' + tgt]) {
-              relevantEdges[cur2 + '>' + tgt] = true;
-            }
-            if (!visitedDown[tgt]) {
-              visitedDown[tgt] = true;
-              queueDown.push(tgt);
-            }
-          }
-        }
-
-        // 汇总所有相关节点（上游可达 + 下游可达 + 自身）
-        var allVisited = {};
-        Object.keys(visitedUp).forEach(function (k) {
-          allVisited[k] = true;
-        });
-        Object.keys(visitedDown).forEach(function (k) {
-          allVisited[k] = true;
-        });
-        Object.keys(relevantEdges).forEach(function (k) {
-          var parts = k.split('>');
-          allVisited[parts[0]] = true;
-          allVisited[parts[1]] = true;
-        });
-
-        Object.keys(allVisited).forEach(function (nid) {
-          relevantNodes[nid] = true;
-        });
-
-        applyHighlight(graph, startNodeId, relevantNodes, relevantEdges);
-      }
-
-      /**
-       * 应用高亮：相关节点/连线保持，其余节点/连线变浅灰色。
-       */
-      function applyHighlight(graph, activeNode, relevantNodes, relevantEdges) {
-        var svg = preview.querySelector('svg');
-        if (!svg) return;
-        svg.classList.add('is-dimmed');
-
-        // 节点：遍历所有 g.node，标记相关/激活
-        var nodeEls = svg.querySelectorAll('g.node');
-        for (var i = 0; i < nodeEls.length; i++) {
-          var g = nodeEls[i];
-          var gid = g.getAttribute('id') || '';
-          var m = /flowchart-([\s\S]+)-(\d+)$/.exec(gid);
-          if (!m) continue;
-          var nid = m[1];
-          if (relevantNodes[nid]) {
-            g.classList.add('is-relevant');
-            if (nid === activeNode) g.classList.add('is-active');
-          }
-        }
-
-        // 连线：相关边保持，其余变灰
-        // 用 data-id 去掉前缀/索引后的 key 与解析边匹配（兼容含 _ 的节点 id）
-        var relevantEdgeKeys = {};
-        Object.keys(relevantEdges).forEach(function (key) {
-          var parts = key.split('>');
-          relevantEdgeKeys[parts[0] + '_' + parts[1]] = true;
-        });
-        graph.edgePaths.forEach(function (ep) {
-          if (relevantEdgeKeys[ep.key]) {
-            ep.path.classList.add('is-relevant');
-          }
-        });
-      }
-
-      /**
-       * 清除所有高亮与选中状态。
-       */
-      function clearHighlight() {
-        var svg = preview ? preview.querySelector('svg') : null;
-        if (svg) {
-          svg.classList.remove('is-dimmed');
-          var nodeEls = svg.querySelectorAll('g.node');
-          for (var i = 0; i < nodeEls.length; i++) {
-            nodeEls[i].classList.remove('is-relevant', 'is-active');
-          }
-          var paths = svg.querySelectorAll('path.is-relevant');
-          for (var j = 0; j < paths.length; j++) {
-            paths[j].classList.remove('is-relevant');
-          }
-        }
-      }
-
-      function applyZoom(level) {
-        zoomLevel = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, level));
-        var canvas = getSvgCanvas();
-        if (canvas) {
-          canvas.style.transform = 'scale(' + zoomLevel + ')';
-        }
-        zoomLabel.textContent = Math.round(zoomLevel * 100) + '%';
-      }
-
-      function resetZoom() {
-        applyZoom(1);
-      }
-
-      function zoomBy(delta) {
-        applyZoom(zoomLevel + delta);
-      }
-
-      /**
-       * 将 mermaid 文本渲染为 SVG 字符串。
-       * 浏览器环境下直接使用全局 window.mermaid（由 mermaid.min.js 挂载）。
-       * @param {string} text mermaid 文本
-       * @param {object} [options] mermaid 初始化配置
-       * @returns {Promise<string>} SVG 字符串
-       */
-      function renderMermaid(text, options) {
-        // initialize 为同步方法，返回 undefined，需先调用再渲染。
-        window.mermaid.initialize({
-          startOnLoad: false,
-          ...(options || {}),
-        });
-        return window.mermaid.render('mermaid-svg', text);
-      }
-
-      /* ========== 防抖渲染（停止输入 2 秒后触发） ========== */
-      var debounceTimer = null;
-      var DEBOUNCE_MS = 1000;
-
-      function scheduleRender() {
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(renderCurrent, DEBOUNCE_MS);
-      }
+      /* ========== 渲染：交给 index.js 的 renderToContainer ========== */
+      var diagram = null;
 
       function renderCurrent() {
         var text = editor.value;
         if (!text || !text.trim()) {
-          renderEmpty('等待渲染…');
+          if (diagram) diagram.clearHighlight();
+          preview.innerHTML = '<div class="mermaid-highlighter-empty">等待渲染…</div>';
+          setStatus('就绪');
           return;
         }
-        renderIntoPreview(text);
-      }
-
-      function renderEmpty(message) {
-        preview.innerHTML =
-          '<div class="preview__empty">' + escapeHtml(message) + '</div>';
-      }
-
-      function renderError(message) {
-        preview.innerHTML =
-          '<div class="preview__error">渲染失败：' + escapeHtml(message) + '</div>';
-      }
-
-      function renderSpinner() {
-        preview.innerHTML =
-          '<div class="preview__spinner"></div>';
-      }
-
-      function escapeHtml(str) {
-        return String(str)
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;')
-          .replace(/"/g, '&quot;');
-      }
-
-      function renderIntoPreview(text) {
-        var token = ++renderToken;
         setStatus('渲染中…');
-        renderSpinner();
-
-        var svg;
-        renderMermaid(text)
-          .then(function (result) {
-            // mermaid v11 的 render 返回 { svg, diagramType, bindFunctions }，
-            // 取其中的 svg 字符串。
-            svg = result && result.svg ? result.svg : result;
-            if (token !== renderToken) return; // 已有更新请求，丢弃过期结果
-
-            // 渲染新图后重置缩放，并包裹一层画布用于缩放 transform。
-            resetZoom();
-            preview.innerHTML =
-              '<div class="preview__canvas">' + svg + '</div>';
-            // 初始化点击高亮（仅 graph/flowchart 生效）
-            setupHighlight();
+        diagram
+          .render(text)
+          .then(function (svg) {
+            if (!svg) {
+              setStatus('就绪');
+              return;
+            }
             setStatus('已渲染');
           })
           .catch(function (err) {
-            if (token !== renderToken) return;
             console.error(err);
-            renderError(err && err.message ? err.message : String(err));
             setStatus('渲染失败');
           });
       }
 
-      function setStatus(text) {
-        status.textContent = text;
-      }
+      // 创建 diagram 实例（传入容器 + 初始代码）
+      diagram = M.renderToContainer(preview, editor.value, {
+        onZoomChange: function (level) {
+          zoomLabel.textContent = Math.round(level * 100) + '%';
+        },
+      });
+
+      // 首次渲染
+      renderCurrent();
+
+      /* ========== 缩放按钮 ========== */
+      zoomIn.addEventListener('click', function () {
+        if (diagram) diagram.zoomIn();
+      });
+      zoomOut.addEventListener('click', function () {
+        if (diagram) diagram.zoomOut();
+      });
+      zoomReset.addEventListener('click', function () {
+        if (diagram) diagram.resetZoom();
+      });
+
+      /* ========== 防抖渲染（停止输入后触发） ========== */
+      var debounceTimer = null;
+      var DEBOUNCE_MS = 1000;
+
+      editor.addEventListener('input', function () {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(renderCurrent, DEBOUNCE_MS);
+      });
 
       /* ========== 视图模式切换（分栏 / 仅左侧 / 仅右侧） ========== */
       function setViewMode(mode) {
-        // 更新按钮高亮
         Array.prototype.forEach.call(
           viewToggle.querySelectorAll('.btn'),
           function (btn) {
@@ -993,13 +449,12 @@
         divider.classList.toggle('divider--hidden', solo);
         main.classList.toggle('main--solo', solo);
 
-        // 单栏模式恢复默认尺寸，避免隐藏的分隔条比例残留
         if (solo) {
           main.style.setProperty('--left-ratio', null);
           leftPane.style.flexBasis = '';
         }
 
-        renderCurrent(); // 单栏切换后立即重绘
+        renderCurrent();
       }
 
       viewToggle.addEventListener('click', function (e) {
@@ -1023,7 +478,6 @@
         if (!isDragging) return;
         var rect = main.getBoundingClientRect();
         var ratio = (e.clientX - rect.left) / rect.width;
-        // 限制比例范围 15% ~ 85%
         ratio = Math.min(0.85, Math.max(0.15, ratio));
         leftPane.style.flexBasis = ratio * 100 + '%';
         main.style.setProperty('--left-ratio', ratio);
@@ -1037,57 +491,12 @@
         document.body.style.userSelect = '';
       });
 
-      /* ========== 缩放控件事件绑定 ========== */
-      zoomIn.addEventListener('click', function () {
-        zoomBy(ZOOM_STEP);
-      });
-
-      zoomOut.addEventListener('click', function () {
-        zoomBy(-ZOOM_STEP);
-      });
-
-      zoomReset.addEventListener('click', function () {
-        resetZoom();
-      });
-
-      // 鼠标滚轮缩放：按住 Ctrl/⌘ 滚动时缩放。
-      preview.addEventListener(
-        'wheel',
-        function (e) {
-          if (!e.ctrlKey && !e.metaKey) return;
-          e.preventDefault();
-          zoomBy(e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP);
-        },
-        { passive: false }
-      );
-
-      // 键盘快捷键：+ / - / 0 缩放。
-      document.addEventListener('keydown', function (e) {
-        // 避免在文本编辑框内触发快捷键。
-        var tag = (e.target.tagName || '').toLowerCase();
-        if (tag === 'textarea' || tag === 'input') return;
-
-        if (e.key === '+' || e.key === '=') {
-          e.preventDefault();
-          zoomBy(ZOOM_STEP);
-        } else if (e.key === '-' || e.key === '_') {
-          e.preventDefault();
-          zoomBy(-ZOOM_STEP);
-        } else if (e.key === '0') {
-          e.preventDefault();
-          resetZoom();
-        }
-      });
-
-      /* ========== 编辑器防抖事件绑定 ========== */
-      editor.addEventListener('input', scheduleRender);
-
-      /* ========== 初始化 ========== */
-      // 初始默认 50% 分栏
+      /* ========== 初始化：默认 50% 分栏 ========== */
       leftPane.style.flexBasis = '50%';
 
-      // 首次渲染
-      renderCurrent();
+      function setStatus(text) {
+        status.textContent = text;
+      }
     })();
   </script>
 </body>
