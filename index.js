@@ -277,12 +277,24 @@ const MODULE_CSS = `
     transform-origin: 0 0;
     transition: transform 0.15s ease;
   }
+  /* 各主题：canvas 上的主题 class 提供高亮色（背景色由容器内联样式控制） */
+  .mermaid-highlighter-canvas.mh-theme-light {
+    --mh-highlight: #2f81f7;
+  }
+  .mermaid-highlighter-canvas.mh-theme-dark {
+    --mh-highlight: #f85149;
+  }
+  .mermaid-highlighter-canvas.mh-theme-business {
+    --mh-highlight: #0e7490;
+  }
   .mermaid-highlighter-canvas svg .node {
     cursor: pointer;
     transition: opacity 0.2s ease;
   }
   .mermaid-highlighter-canvas svg .node.is-active .label-container {
-    filter: drop-shadow(0 0 3px rgba(47, 129, 247, 0.9));
+    filter: drop-shadow(
+      0 0 3px var(--mh-highlight, #2f81f7)
+    );
   }
   .mermaid-highlighter-canvas svg .node.is-active {
     opacity: 1;
@@ -316,6 +328,92 @@ const MODULE_CSS = `
     color: #d1242f;
   }
 `;
+
+/**
+ * 默认配色方案。
+ * 每个方案包含：
+ *  - key       方案标识
+ *  - label     显示名称
+ *  - mermaid   mermaid 初始化配置（theme + themeVariables），用于控制渲染主体配色
+ *  - highlight 高亮颜色（用于选中节点/相关节点的描边发光）
+ *  - background 画布背景色
+ */
+const THEMES = {
+  light: {
+    key: 'light',
+    label: '浅色经典',
+    background: '#ffffff',
+    highlight: '#2f81f7',
+    mermaid: {
+      theme: 'base',
+      themeVariables: {
+        background: '#ffffff',
+        primaryColor: '#f0f4ff',
+        primaryTextColor: '#1f2328',
+        primaryBorderColor: '#1f2328',
+        lineColor: '#1f2328',
+        textColor: '#1f2328',
+        edgeLabelBackground: '#ffffff',
+        nodeBorder: '#1f2328',
+        clusterBkg: '#f6f8fa',
+        clusterBorder: '#d0d7de',
+      },
+    },
+  },
+  dark: {
+    key: 'dark',
+    label: '深色经典',
+    background: '#0d1117',
+    highlight: '#f85149',
+    mermaid: {
+      theme: 'base',
+      themeVariables: {
+        background: '#0d1117',
+        primaryColor: '#161b22',
+        primaryTextColor: '#f0f6fc',
+        primaryBorderColor: '#f0f6fc',
+        lineColor: '#f0f6fc',
+        textColor: '#f0f6fc',
+        edgeLabelBackground: '#0d1117',
+        nodeBorder: '#f0f6fc',
+        clusterBkg: '#161b22',
+        clusterBorder: '#30363d',
+      },
+    },
+  },
+  business: {
+    key: 'business',
+    label: '商务蓝',
+    background: '#fbfcfe',
+    highlight: '#0e7490',
+    mermaid: {
+      theme: 'base',
+      themeVariables: {
+        background: '#fbfcfe',
+        primaryColor: '#e8f1fa',
+        primaryTextColor: '#0b1f33',
+        primaryBorderColor: '#1e6fd9',
+        lineColor: '#33475b',
+        textColor: '#0b1f33',
+        edgeLabelBackground: '#fbfcfe',
+        nodeBorder: '#1e6fd9',
+        clusterBkg: '#f0f6fc',
+        clusterBorder: '#9dc1e8',
+      },
+    },
+  },
+};
+
+/** 获取默认主题 key。 */
+function getDefaultThemeKey() {
+  return 'light';
+}
+
+/** 根据 key 解析主题配置；未知 key 回退到默认主题。 */
+function resolveTheme(key) {
+  if (key && THEMES[key]) return THEMES[key];
+  return THEMES[getDefaultThemeKey()];
+}
 
 let styleInjected = false;
 
@@ -491,6 +589,44 @@ function createDiagram(container, mermaidText, options) {
 
   const cfg = Object.assign({}, options);
 
+  // ---- 配色主题 ----
+  // 当前主题 key（默认取 options.theme 或默认主题）
+  let currentThemeKey = resolveTheme(cfg.theme).key;
+
+  // 构造传给 mermaid 的渲染配置：主题 mermaid 配置 + 用户自定义 mermaid 配置
+  function buildMermaidConfig() {
+    const theme = resolveTheme(currentThemeKey);
+    const userMermaid =
+      typeof cfg.mermaid === 'object' && cfg.mermaid !== null
+        ? cfg.mermaid
+        : {};
+    return Object.assign({}, theme.mermaid, userMermaid);
+  }
+
+  /**
+   * 应用当前主题配色。
+   * - 背景色应用到整个容器 DOM（root，即传入的 container），通过内联样式覆盖页面样式；
+   * - 高亮色通过容器上的 --mh-highlight 变量 + canvas 主题 class 生效。
+   */
+  function applyThemeClass() {
+    const theme = resolveTheme(currentThemeKey);
+
+    // 整个容器 DOM 的背景随主题变化
+    root.style.background = theme.background;
+    root.style.setProperty('--mh-highlight', theme.highlight);
+
+    // canvas 上的主题 class 用于驱动高亮选择器
+    const canvas = getCanvas();
+    if (canvas) {
+      Object.keys(THEMES).forEach((k) => {
+        canvas.classList.remove('mh-theme-' + k);
+      });
+      canvas.classList.add('mh-theme-' + theme.key);
+    }
+
+    if (cfg.onThemeChange) cfg.onThemeChange(currentThemeKey);
+  }
+
   // ---- 缩放状态 ----
   const MIN_ZOOM = 0.2;
   const MAX_ZOOM = 5;
@@ -511,9 +647,17 @@ function createDiagram(container, mermaidText, options) {
       if (cfg.onRendered) cfg.onRendered(null);
       return null;
     }
+    lastText = text;
     const token = ++renderToken;
-    // mermaidUrl 可在每次渲染时覆盖
-    const merged = Object.assign({}, cfg, renderOptions || {});
+    // 合并：主题的 mermaid 配置 + 用户配置 + 单次渲染覆盖，展开到顶层传给 mermaid。
+    // buildMermaidConfig() 会覆盖 cfg.theme（用户指定的主题 key），
+    // 因此最终传入 mermaid 的 theme 是各主题方案中的 mermaid theme（如 'base'）。
+    const merged = Object.assign(
+      {},
+      cfg,
+      renderOptions || {},
+      buildMermaidConfig()
+    );
     const svgText = await renderMermaid(text, merged);
     if (token !== renderToken) return null; // 已有更新请求，丢弃过期结果
     if (!root.isConnected) return null;
@@ -521,6 +665,7 @@ function createDiagram(container, mermaidText, options) {
     resetZoom();
     // 渲染到传入的 DOM：清空容器并写入画布 + SVG
     root.innerHTML = '<div class="mermaid-highlighter-canvas">' + svgText + '</div>';
+    applyThemeClass();
     setupHighlight(text);
     if (cfg.onRendered) cfg.onRendered(getSvg());
     return getSvg();
@@ -777,6 +922,34 @@ function createDiagram(container, mermaidText, options) {
     return true;
   }
 
+  // ---- 配色主题控制 ----
+  /** 返回当前主题 key。 */
+  function getTheme() {
+    return currentThemeKey;
+  }
+
+  /** 返回所有可用主题（含 label / key / background）。 */
+  function getThemes() {
+    return Object.keys(THEMES).map((k) => ({
+      key: THEMES[k].key,
+      label: THEMES[k].label,
+      background: THEMES[k].background,
+    }));
+  }
+
+  /** 记录当前渲染文本（供 setTheme 重渲染使用）。 */
+  let lastText = typeof mermaidText === 'string' ? mermaidText : '';
+
+  /** 切换到指定主题并重新渲染。 */
+  async function setTheme(themeKey, renderOptions) {
+    const resolved = resolveTheme(themeKey);
+    if (resolved.key !== currentThemeKey) {
+      currentThemeKey = resolved.key;
+    }
+    // 重新渲染以应用新配色
+    return render(lastText, renderOptions);
+  }
+
   // ---- 缩放交互事件 ----
   function onPreviewWheel(e) {
     if (!e.ctrlKey && !e.metaKey) return;
@@ -821,6 +994,9 @@ function createDiagram(container, mermaidText, options) {
     resetZoom,
     highlightNode,
     clearHighlight,
+    getTheme,
+    setTheme,
+    getThemes,
     destroy,
   };
 }

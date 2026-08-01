@@ -55,16 +55,33 @@ const svg = await renderMermaid('graph TD;\n A-->B;', { theme: 'dark' });
 - `container` `<HTMLElement>`：目标容器元素，渲染结果直接写入该元素。
 - `mermaidText` `<string>`：mermaid 文本。
 - `options` `<object>`：可选配置，支持：
+  - `theme`：配色方案 key（默认 `light`）
   - `mermaidUrl`：mermaid 构建加载路径（默认 `vendor/mermaid/mermaid.min.js`）
+  - `mermaid`：额外的 mermaid 初始化配置（会合并进主题配置）
   - `onZoomChange(level)`：缩放比例变化回调
   - `onRendered(svg)`：渲染完成回调
   - `onError(message)`：渲染出错回调
+  - `onThemeChange(key)`：配色方案变化回调
 - 返回：`<object>` 控制句柄，包含：
   - `render(text)` / `update(text)`：重新渲染
   - `getSvg()`：获取当前 SVG 元素
   - `zoomIn()` / `zoomOut()` / `resetZoom()` / `setZoom(level)` / `getZoom()`：缩放控制
   - `highlightNode(nodeId)` / `clearHighlight()`：点击高亮控制
+  - `getTheme()` / `setTheme(key)` / `getThemes()`：配色方案控制
   - `destroy()`：销毁实例并清理内容
+
+#### 配色方案
+
+内置三个默认配色方案，可通过 `theme` 选项或 `setTheme(key)` 切换：
+
+| key | 名称 | 背景 | 元素 | 高亮 |
+|-----|------|------|------|------|
+| `light` | 浅色经典 | 白 | 黑/深灰 | 蓝 |
+| `dark` | 深色经典 | 黑 | 白 | 红 |
+| `business` | 商务蓝 | 浅蓝灰 | 深蓝边 | 青蓝 |
+
+配色方案通过 mermaid 的 `themeVariables` 控制渲染主体配色，并同步更新画布背景与
+节点高亮（`is-active` 发光）颜色。
 
 浏览器用法示例（HTML 页面只需引入 `index.js`）：
 
@@ -85,6 +102,10 @@ const svg = await renderMermaid('graph TD;\n A-->B;', { theme: 'dark' });
   diagram.zoomIn();
   // 高亮指定节点（其上下游）
   diagram.highlightNode('B');
+  // 切换配色方案（light / dark / business）
+  diagram.setTheme('dark');
+  // 查看可用配色
+  console.log(diagram.getThemes());
 </script>
 ```
 

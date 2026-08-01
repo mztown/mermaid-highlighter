@@ -106,6 +106,32 @@
       text-align: right;
     }
 
+    .toolbar__select-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: #f6f8fa;
+      margin-right: 8px;
+    }
+
+    .toolbar__select {
+      height: 30px;
+      padding: 0 8px;
+      font-size: 13px;
+      color: #1f2328;
+      background: #f6f8fa;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      cursor: pointer;
+      outline: none;
+    }
+
+    .toolbar__select:focus {
+      border-color: #2f81f7;
+      box-shadow: 0 0 0 3px rgba(47, 129, 247, 0.2);
+    }
+
     /* ---------- 主区域布局 ---------- */
     .main {
       display: flex;
@@ -273,6 +299,10 @@
     <div class="toolbar__title">Mermaid Highlighter</div>
     <div class="toolbar__actions">
       <span class="toolbar__status" id="status">就绪</span>
+      <label class="toolbar__select-label" for="themeSelect">
+        配色
+        <select class="toolbar__select" id="themeSelect" title="选择配色方案"></select>
+      </label>
       <div class="btn-group" id="viewToggle" role="group" aria-label="视图模式">
         <button class="btn btn--active" type="button" data-mode="both">
           分栏
@@ -368,6 +398,7 @@
       var zoomOut = document.getElementById('zoomOut');
       var zoomReset = document.getElementById('zoomReset');
       var zoomLabel = document.getElementById('zoomLabel');
+      var themeSelect = document.getElementById('themeSelect');
 
       /* ========== 渲染：交给 index.js 的 renderToContainer ========== */
       var diagram = null;
@@ -405,6 +436,32 @@
 
       // 首次渲染
       renderCurrent();
+
+      /* ========== 配色方案 ========== */
+      // 填充主题下拉
+      var themes = diagram ? diagram.getThemes() : [];
+      themes.forEach(function (t) {
+        var opt = document.createElement('option');
+        opt.value = t.key;
+        opt.textContent = t.label;
+        themeSelect.appendChild(opt);
+      });
+      if (diagram) themeSelect.value = diagram.getTheme();
+
+      // 切换配色方案
+      themeSelect.addEventListener('change', function () {
+        if (!diagram) return;
+        setStatus('切换配色…');
+        diagram
+          .setTheme(themeSelect.value)
+          .then(function (svg) {
+            setStatus(svg ? '已渲染' : '就绪');
+          })
+          .catch(function (err) {
+            console.error(err);
+            setStatus('渲染失败');
+          });
+      });
 
       /* ========== 缩放按钮 ========== */
       zoomIn.addEventListener('click', function () {
