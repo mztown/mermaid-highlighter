@@ -696,6 +696,133 @@ function createDiagram(container, mermaidText, options) {
     return root.querySelector('.mermaid-highlighter-canvas');
   }
 
+  /**
+   * 获取当前渲染 SVG 的字符串形式（含 XML 声明与命名空间，可直接保存为 .svg 文件）。
+   * @returns {string|null} SVG 字符串；无渲染结果时返回 null
+   */
+  function getSvgString() {
+    const svg = getSvg();
+    if (!svg) return null;
+    // 将当前高亮/主题等 class 状态固化为内联样式，保证独立文件正确显示。
+    const clone = svg.cloneNode(true);
+    inlineStylesForSvg(clone);
+    applyBackgroundToSvg(clone);
+    const serializer =
+      typeof XMLSerializer !== 'undefined'
+        ? new XMLSerializer()
+        : null;
+    const body = serializer
+      ? serializer.serializeToString(clone)
+      : (clone.outerHTML || '');
+    // 仅当 <svg> 标签缺少 xmlns 时才补充，避免 xmlns 重复定义导致打开报错。
+    let result = body;
+    if (/<svg(?![^>]*\bxmlns=)/.test(result)) {
+      result = result.replace(/<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
+    }
+    return '<?xml version="1.0" encoding="UTF-8"?>\n' + result;
+  }
+
+  /**
+   * 下载当前渲染的 SVG 图像。
+   * @param {string} [filename] 文件名（默认 mermaid-diagram.svg）
+   * @returns {boolean} 是否有内容可下载
+   */
+  function downloadSvg(filename) {
+    const svgString = getSvgString();
+    if (!svgString) return false;
+    const name = filename || 'mermaid-diagram.svg';
+    // 兼容 .svg 与 .svgz 的扩展名检查
+    const finalName = /\.svgz?$/i.test(name) ? name : name + '.svg';
+    downloadBlob(svgString, finalName, 'image/svg+xml;charset=utf-8');
+    return true;
+  }
+
+  /**
+   * 将 SVG 子树中依赖外部样式的 class 状态固化为内联 style。
+   * 主要处理高亮（is-dimmed / is-relevant / is-active）产生的不透明度与灰度。
+   */
+  function inlineStylesForSvg(svgClone) {
+    const dimmed = svgClone.classList.contains('is-dimmed');
+    // 节点处理
+    const nodes = svgClone.querySelectorAll('g.node');
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i];
+      if (dimmed && !n.classList.contains('is-relevant')) {
+        n.style.opacity = '0.18';
+        n.style.filter = 'grayscale(1)';
+      } else if (n.classList.contains('is-relevant')) {
+        n.style.opacity = '1';
+      }
+      if (n.classList.contains('is-active')) {
+        const label = n.querySelector('.label-container');
+        if (label) {
+          label.style.filter =
+            'drop-shadow(0 0 3px var(--mh-highlight, #2f81f7))';
+        }
+      }
+    }
+    // 连线处理
+    const paths = svgClone.querySelectorAll('path.flowchart-link');
+    for (let j = 0; j < paths.length; j++) {
+      const p = paths[j];
+      if (dimmed && !p.classList.contains('is-relevant')) {
+        p.style.opacity = '0.18';
+        p.style.filter = 'grayscale(1)';
+      }
+    }
+  }
+
+  /**
+   * 在下载的 SVG 中插入一个与当前配色方案一致的背景 rect，
+   * 使下载文件的背景与用户设置保持一致。
+   */
+  function applyBackgroundToSvg(svgClone) {
+    const theme = resolveTheme(currentThemeKey);
+    if (!theme || !theme.background) return;
+
+    const ns = 'http://www.w3.org/2000/svg';
+    const rect = document.createElementNS(ns, 'rect');
+
+    // 优先根据 viewBox 确定尺寸，否则使用百分比覆盖整个视口
+    const vb = svgClone.getAttribute('viewBox');
+    if (vb) {
+      const parts = vb.trim().split(/[\s,]+/).map(Number);
+      if (parts.length === 4 && parts[2] > 0 && parts[3] > 0) {
+        rect.setAttribute('x', parts[0]);
+        rect.setAttribute('y', parts[1]);
+        rect.setAttribute('width', parts[2]);
+        rect.setAttribute('height', parts[3]);
+      } else {
+        rect.setAttribute('width', '100%');
+        rect.setAttribute('height', '100%');
+      }
+    } else {
+      rect.setAttribute('width', '100%');
+      rect.setAttribute('height', '100%');
+    }
+    rect.setAttribute('fill', theme.background);
+    rect.setAttribute('data-mh-background', 'true');
+
+    // 背景 rect 置于最底层
+    svgClone.insertBefore(rect, svgClone.firstChild);
+  }
+
+  /**
+   * 通过 Blob + <a download> 触发浏览器下载。
+   */
+  function downloadBlob(content, filename, mimeType) {
+    const blob = new Blob([content], { type: mimeType || 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    // 延迟释放对象 URL，避免下载被中断
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
   // ---- 缩放 ----
   function applyZoom(level) {
     zoomLevel = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, level));
@@ -987,6 +1114,8 @@ function createDiagram(container, mermaidText, options) {
     render,
     update: render, // 别名
     getSvg,
+    getSvgString,
+    downloadSvg,
     getZoom,
     setZoom,
     zoomIn,

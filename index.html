@@ -303,6 +303,14 @@
         配色
         <select class="toolbar__select" id="themeSelect" title="选择配色方案"></select>
       </label>
+      <button
+        class="btn"
+        id="downloadBtn"
+        type="button"
+        title="下载当前渲染的 SVG 图像"
+      >
+        下载 SVG
+      </button>
       <div class="btn-group" id="viewToggle" role="group" aria-label="视图模式">
         <button class="btn btn--active" type="button" data-mode="both">
           分栏
@@ -399,6 +407,7 @@
       var zoomReset = document.getElementById('zoomReset');
       var zoomLabel = document.getElementById('zoomLabel');
       var themeSelect = document.getElementById('themeSelect');
+      var downloadBtn = document.getElementById('downloadBtn');
 
       /* ========== 渲染：交给 index.js 的 renderToContainer ========== */
       var diagram = null;
@@ -472,6 +481,15 @@
       });
       zoomReset.addEventListener('click', function () {
         if (diagram) diagram.resetZoom();
+      });
+
+      // 下载 SVG
+      downloadBtn.addEventListener('click', function () {
+        if (!diagram || !diagram.downloadSvg()) {
+          setStatus('无内容可下载');
+          return;
+        }
+        setStatus('已下载');
       });
 
       /* ========== 防抖渲染（停止输入后触发） ========== */

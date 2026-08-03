@@ -65,10 +65,15 @@ const svg = await renderMermaid('graph TD;\n A-->B;', { theme: 'dark' });
 - 返回：`<object>` 控制句柄，包含：
   - `render(text)` / `update(text)`：重新渲染
   - `getSvg()`：获取当前 SVG 元素
+  - `getSvgString()`：获取当前 SVG 的字符串（含 XML 声明与命名空间）
+  - `downloadSvg(filename?)`：下载当前 SVG 图像（默认文件名 `mermaid-diagram.svg`）
   - `zoomIn()` / `zoomOut()` / `resetZoom()` / `setZoom(level)` / `getZoom()`：缩放控制
   - `highlightNode(nodeId)` / `clearHighlight()`：点击高亮控制
   - `getTheme()` / `setTheme(key)` / `getThemes()`：配色方案控制
   - `destroy()`：销毁实例并清理内容
+
+> 说明：`downloadSvg` 会先把当前高亮/变灰等状态固化为内联样式，再导出，
+> 因此下载的 `.svg` 文件在任意查看器中都能正确显示完整图表。
 
 #### 配色方案
 
@@ -106,6 +111,8 @@ const svg = await renderMermaid('graph TD;\n A-->B;', { theme: 'dark' });
   diagram.setTheme('dark');
   // 查看可用配色
   console.log(diagram.getThemes());
+  // 下载当前 SVG（默认 mermaid-diagram.svg）
+  diagram.downloadSvg('my-diagram.svg');
 </script>
 ```
 
