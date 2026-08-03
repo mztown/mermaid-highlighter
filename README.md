@@ -1,24 +1,65 @@
 # mermaid-highlighter
 
-将 mermaid 文本渲染为 SVG 的 JS 模块，并提供离线可用的可视化编辑页面。
+将 mermaid 文本渲染为可缩放、可交互高亮 SVG 的即插即用（Plug-and-Play）模块。
+支持 Node 与浏览器双环境，带 TypeScript 类型声明。
 
 ## 安装
 
 ```bash
-npm install
+npm install mermaid-highlighter
 # 若在 Node.js（服务端）环境使用，需额外安装 jsdom：
 npm install jsdom
 ```
 
+> 已通过 `exports` 提供 CommonJS / ESM / TypeScript 多入口，`import` 与 `require`
+> 均可直接使用。
+
 ## 用法
+
+### Node.js（服务端）
 
 ```js
 const { renderMermaid } = require('mermaid-highlighter');
+// 或：import { renderMermaid } from 'mermaid-highlighter';
 
 (async () => {
   const svg = await renderMermaid('graph TD;\n  A-->B;\n  B-->C;');
   console.log(svg); // 完整 SVG 字符串
 })();
+```
+
+### 浏览器（即插即用）
+
+任意 HTML 页面只需引入 `index.js`（mermaid 会由模块自行动态加载），传入一个
+DOM 容器和 mermaid 文本即可渲染出可缩放、可交互高亮的图表：
+
+```html
+<div id="container" style="width: 600px; height: 400px;"></div>
+
+<script src="node_modules/mermaid-highlighter/index.js"></script>
+<script>
+  const diagram = MermaidHighlighter.renderToContainer(
+    document.getElementById('container'),
+    'graph TD;\n  A --> B;\n  B --> C;'
+  );
+  // 缩放 / 高亮 / 配色 / 下载
+  diagram.zoomIn();
+  diagram.highlightNode('B');
+  diagram.setTheme('dark');
+  diagram.downloadSvg('diagram.svg');
+</script>
+```
+
+或使用打包工具（webpack / vite / rollup）：
+
+```js
+import { renderToContainer } from 'mermaid-highlighter';
+
+const diagram = renderToContainer(
+  document.getElementById('container'),
+  'graph TD;\n  A --> B;',
+  { theme: 'business', enableScrollZoom: true }
+);
 ```
 
 ### 自定义主题

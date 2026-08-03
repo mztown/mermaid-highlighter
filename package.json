@@ -1,22 +1,51 @@
 {
   "name": "mermaid-highlighter",
   "version": "1.0.0",
-  "description": "Baked function set to highlight up-stream down-stream nodes in a rendered mermaid flowchart",
+  "description": "Render mermaid into a zoomable, interactive & highlightable SVG. Plug-and-play: pass a DOM container + mermaid text.",
   "keywords": [
     "mermaid",
-    "highlighter"
+    "highlighter",
+    "svg",
+    "diagram",
+    "flowchart",
+    "zoom",
+    "highlight",
+    "graph"
   ],
   "license": "MIT",
   "author": "maurice.t",
   "type": "commonjs",
   "main": "index.js",
+  "module": "index.mjs",
+  "browser": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.mjs",
+      "require": "./index.js",
+      "default": "./index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "index.mjs",
+    "index.d.ts",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node test/index.test.js"
   },
   "dependencies": {
     "mermaid": "^11.4.1"
   },
   "optionalDependencies": {
     "jsdom": "^25.0.1"
-  }
+  },
+  "engines": {
+    "node": ">=14"
+  },
+  "sideEffects": false
 }

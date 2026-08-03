@@ -95,8 +95,20 @@ function loadMermaidFromScript(url) {
 }
 
 /**
+ * 解析 mermaid 模块（处理 CJS 的 ESM 转译产物，取 .default）。
+ * @param {object} raw require/import 得到的模块
+ * @returns {object} mermaid API
+ */
+function normalizeMermaid(raw) {
+  return raw && raw.default ? raw.default : raw;
+}
+
+/**
  * 懒加载 mermaid 库。
- * 浏览器：若 `window.mermaid` 已存在则直接使用；否则动态加载 mermaid.min.js。
+ * 浏览器加载顺序：
+ *   1. `window.mermaid`（已由其他方式引入）
+ *   2. `require('mermaid')`（被 bundler 打包时的 node_modules 依赖）
+ *   3. 动态加载 mermaid 构建（默认 vendor 或 mermaidUrl 指定的 CDN/路径）
  * Node：require('mermaid')。
  * @param {string} [url] mermaid 脚本路径（浏览器动态加载时使用）
  * @returns {Promise<object>}
@@ -105,6 +117,17 @@ async function loadMermaid(url) {
   if (isBrowser()) {
     if (typeof window.mermaid !== 'undefined') {
       return window.mermaid;
+    }
+    // bundler 场景：模块已被打包，可尝试 require('mermaid')
+    if (typeof require === 'function') {
+      try {
+        const m = require('mermaid');
+        if (m && (typeof m.initialize === 'function' || m.default)) {
+          return normalizeMermaid(m);
+        }
+      } catch (_) {
+        /* 无 node_modules 依赖时忽略，走动态加载 */
+      }
     }
     // 动态加载 mermaid 构建，URL 由调用方传入或使用默认路径
     const scriptUrl = url || DEFAULT_MERMAID_URL;
@@ -120,8 +143,7 @@ async function loadMermaid(url) {
 
   try {
     const mermaid = require('mermaid');
-    // mermaid v11 的 CJS 入口为 ESM 转译产物，真实 API 挂在 `.default`。
-    return mermaid && mermaid.default ? mermaid.default : mermaid;
+    return normalizeMermaid(mermaid);
   } catch (err) {
     throw new Error(
       '无法加载 mermaid 库。请先在项目目录执行 `npm install mermaid`。'
@@ -206,9 +228,7 @@ async function createNodeDom() {
     };
   }
 
-  const rawMermaid = require('mermaid');
-  const mermaid =
-    rawMermaid && rawMermaid.default ? rawMermaid.default : rawMermaid;
+  const mermaid = normalizeMermaid(require('mermaid'));
 
   return { dom, mermaid, injectedKeys };
 }

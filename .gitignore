@@ -1,2 +1,62 @@
-/node_modules
-/vendor
+# ===== 依赖 =====
+node_modules/
+
+# ===== 离线演示（Git 上不需要离线演示功能） =====
+vendor/
+
+# ===== 构建产物 =====
+dist/
+build/
+*.map
+
+# ===== npm 打包产物 =====
+*.tgz
+*.pack
+
+# ===== 测试与覆盖率 =====
+coverage/
+.nyc_output/
+.tmp/
+
+# ===== 日志 =====
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ===== 系统文件 =====
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+
+# ===== 编辑器 / IDE =====
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ===== 临时文件 =====
+*.tmp
+*.temp
+.temp/
+tmp/
+temp/
+_test_*.js
+_tmp*
+*.bak
+
+# ===== 环境变量 =====
+.env
+.env.*
+!.env.example
+
+# ===== 缓存 =====
+.eslintcache
+.prettiercache
