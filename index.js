@@ -45,6 +45,31 @@ function isBrowser() {
 /** mermaid.min.js 的默认加载路径（相对当前页面）。 */
 const DEFAULT_MERMAID_URL = 'vendor/mermaid/mermaid.min.js';
 
+/**
+ * 剥离 mermaid 文本开头的 YAML front-matter（由三条横杠包围的头部元信息，
+ * 如 `id: xxx` 占三行）。渲染时主动忽略这类头部，避免传给 mermaid 解析出错。
+ * @param {string} text 原始 mermaid 文本
+ * @returns {string} 去除 front-matter 后的文本
+ */
+function stripFrontMatter(text) {
+  if (typeof text !== 'string') return text;
+  // 去掉行首空白后按行切分，判断首行是否为 `---`
+  const lines = text.split(/\r?\n/);
+  let start = 0;
+  if (lines.length >= 3 && lines[0].trim() === '---') {
+    // 找到第二个 `---` 作为结束标记（从第 2 行开始找）
+    for (let i = 1; i < lines.length; i++) {
+      if (lines[i].trim() === '---') {
+        start = i + 1; // 跳过结尾的 `---`
+        break;
+      }
+    }
+  }
+  if (start === 0) return text;
+  const rest = lines.slice(start).join('\n');
+  return rest.trim();
+}
+
 /** 模块级 mermaid 加载 Promise（缓存，避免重复加载）。 */
 let mermaidLoadPromise = null;
 
@@ -246,6 +271,8 @@ async function renderMermaid(mermaidText, options = {}) {
   if (typeof mermaidText !== 'string' || mermaidText.trim() === '') {
     throw new TypeError('renderMermaid: mermaidText 必须是非空字符串。');
   }
+  // 忽略开头的 YAML front-matter（`---` 包围的 id 等），避免 mermaid 解析报错
+  mermaidText = stripFrontMatter(mermaidText);
 
   const isNodeEnv = !isBrowser();
   let mermaid;
@@ -457,6 +484,7 @@ function parseFlowchart(text) {
   if (typeof text !== 'string') {
     return { isFlowchart: false, nodes: [], edges: [] };
   }
+  text = stripFrontMatter(text);
   const firstLine = (text.split('\n')[0] || '').trim();
   const isFlowchart = /^(graph|flowchart)\b/.test(firstLine);
   if (!isFlowchart) {
@@ -739,6 +767,8 @@ function createDiagram(container, mermaidText, options) {
       if (cfg.onRendered) cfg.onRendered(null);
       return null;
     }
+    // 忽略开头的 YAML front-matter（`---` 包围的 id 等），保证高亮解析也一致
+    text = stripFrontMatter(text);
     lastText = text;
     const token = ++renderToken;
     // 合并：主题的 mermaid 配置 + 用户配置 + 单次渲染覆盖，展开到顶层传给 mermaid。

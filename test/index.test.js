@@ -73,5 +73,13 @@ test('renderMermaid 在 Node 渲染出 SVG 字符串', async () => {
   assert.ok(svg.includes('<svg'), '返回应为 SVG 字符串');
 });
 
+test('parseFlowchart 忽略开头的 YAML front-matter', () => {
+  const g = M.parseFlowchart(
+    '---\nid: 9D913C38-4409-4194-99C8-2F6141BC30FB\n---\ngraph TD\n A --> B\n'
+  );
+  assert.strictEqual(g.isFlowchart, true);
+  assert.deepStrictEqual(g.nodes.sort(), ['A', 'B']);
+});
+
 console.log(`\n结果: ${passed} 通过, ${failed} 失败`);
 if (failed > 0) process.exit(1);

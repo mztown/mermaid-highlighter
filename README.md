@@ -95,6 +95,19 @@ const diagram = renderToContainer(
 );
 ```
 
+### YAML front-matter 自动忽略
+
+若 mermaid 文本开头带有三条横杠包围的 YAML 头部元信息（例如编辑器导出的 `id`），
+渲染与高亮解析都会**自动忽略**这一段，无需手动删除：
+
+```text
+---
+id: 5BE08626-8499-4DEC-8EC4-A383A9184D72
+---
+graph TD;
+  A --> B;
+```
+
 ### 自定义主题
 
 `renderMermaid(text, options)` 的第二个参数会透传给 `mermaid.initialize`：
