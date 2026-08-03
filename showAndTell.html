@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mermaid Highlighter · 最小实现展示</title>
+  <!-- 本页仅引入 index.js，mermaid 由模块自行动态加载，
+       所有渲染 / 缩放 / 高亮 / 配色 / 下载均由模块自身完成。 -->
+  <script src="index.js"></script>
+</head>
+<body>
+  <!-- 唯一的容器元素，图表将渲染于此 -->
+  <div id="container" style="width: 100vw; height: 100vh;"></div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      var M = window.MermaidHighlighter;
+      if (!M) {
+        document.body.textContent =
+          'MermaidHighlighter 未加载，请确认 index.js 已正确引入。';
+        return;
+      }
+
+      // ===== 在此编写 mermaid 文本（写死于本页，手动编辑） =====
+      var MERMAID_TEXT = [
+        'graph TD',
+        '  A[开始] --> B{是否完成?}',
+        '  B -->|是| C[结束]',
+        '  A --> E --> C',
+      ].join('\n');
+      // ========================================================
+
+      var container = document.getElementById('container');
+
+      // 创建图表：传入容器 + mermaid 文本
+      // 模块自动完成：渲染、滚轮/按钮缩放、点击高亮上下游、配色、下载
+      var diagram = M.renderToContainer(container, MERMAID_TEXT, {
+        theme: 'light',
+      });
+
+      // 保持引用，便于在控制台调试（可选）
+      window.__diagram = diagram;
+    })();
+  </script>
+</body>
+</html>
