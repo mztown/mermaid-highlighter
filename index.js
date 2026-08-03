@@ -574,6 +574,8 @@ function parseFlowchart(text) {
  * @param {HTMLElement} container 目标容器元素
  * @param {string} mermaidText mermaid 文本
  * @param {object} [options] 可选配置
+ *   - `customThemes` `<object>`：用户自定义配色方案，格式
+ *     `{ [key]: { label, background, highlight, mermaid } }`
  * @returns {object} 控制句柄（含 render / zoom / highlight / destroy）
  */
 function createDiagram(container, mermaidText, options) {
@@ -590,12 +592,30 @@ function createDiagram(container, mermaidText, options) {
   const cfg = Object.assign({}, options);
 
   // ---- 配色主题 ----
+  // 实例级主题映射：内置主题 + 用户自定义主题（options.customThemes）
+  // 自定义主题格式：{ [key]: { label, background, highlight, mermaid } }
+  const instanceThemes = Object.assign({}, THEMES);
+  if (cfg.customThemes && typeof cfg.customThemes === 'object') {
+    Object.keys(cfg.customThemes).forEach((k) => {
+      const t = cfg.customThemes[k];
+      if (t && typeof t === 'object') {
+        instanceThemes[k] = Object.assign({}, t, { key: k });
+      }
+    });
+  }
+
+  /** 在实例级主题映射中解析主题；未知 key 回退默认主题。 */
+  function resolveInstanceTheme(key) {
+    if (key && instanceThemes[key]) return instanceThemes[key];
+    return instanceThemes[getDefaultThemeKey()];
+  }
+
   // 是否根据系统/浏览器深浅色模式自动调整（options.autoTheme，默认关闭）
   const autoTheme = cfg.autoTheme === true;
   // 当前主题 key（默认取 options.theme 或默认主题；若 autoTheme 开启则按系统模式）
   let currentThemeKey = autoTheme
     ? getSystemThemeKey()
-    : resolveTheme(cfg.theme).key;
+    : resolveInstanceTheme(cfg.theme).key;
 
   // 系统深浅色变化监听引用（供 destroy 时移除）
   let colorSchemeQuery = null;
@@ -641,7 +661,7 @@ function createDiagram(container, mermaidText, options) {
 
   // 构造传给 mermaid 的渲染配置：主题 mermaid 配置 + 用户自定义 mermaid 配置
   function buildMermaidConfig() {
-    const theme = resolveTheme(currentThemeKey);
+    const theme = resolveInstanceTheme(currentThemeKey);
     const userMermaid =
       typeof cfg.mermaid === 'object' && cfg.mermaid !== null
         ? cfg.mermaid
@@ -655,16 +675,17 @@ function createDiagram(container, mermaidText, options) {
    * - 高亮色通过容器上的 --mh-highlight 变量 + canvas 主题 class 生效。
    */
   function applyThemeClass() {
-    const theme = resolveTheme(currentThemeKey);
+    const theme = resolveInstanceTheme(currentThemeKey);
 
     // 整个容器 DOM 的背景随主题变化
     root.style.background = theme.background;
     root.style.setProperty('--mh-highlight', theme.highlight);
 
-    // canvas 上的主题 class 用于驱动高亮选择器
+    // canvas 上的主题 class 用于驱动高亮选择器（内置主题有对应 CSS class；
+    // 自定义主题无 class，但 --mh-highlight 内联变量已生效）
     const canvas = getCanvas();
     if (canvas) {
-      Object.keys(THEMES).forEach((k) => {
+      Object.keys(instanceThemes).forEach((k) => {
         canvas.classList.remove('mh-theme-' + k);
       });
       canvas.classList.add('mh-theme-' + theme.key);
@@ -828,7 +849,7 @@ function createDiagram(container, mermaidText, options) {
    * 使下载文件的背景与用户设置保持一致。
    */
   function applyBackgroundToSvg(svgClone) {
-    const theme = resolveTheme(currentThemeKey);
+    const theme = resolveInstanceTheme(currentThemeKey);
     if (!theme || !theme.background) return;
 
     const ns = 'http://www.w3.org/2000/svg';
@@ -1144,10 +1165,10 @@ function createDiagram(container, mermaidText, options) {
 
   /** 返回所有可用主题（含 label / key / background）。 */
   function getThemes() {
-    return Object.keys(THEMES).map((k) => ({
-      key: THEMES[k].key,
-      label: THEMES[k].label,
-      background: THEMES[k].background,
+    return Object.keys(instanceThemes).map((k) => ({
+      key: instanceThemes[k].key,
+      label: instanceThemes[k].label,
+      background: instanceThemes[k].background,
     }));
   }
 
@@ -1156,7 +1177,7 @@ function createDiagram(container, mermaidText, options) {
 
   /** 切换到指定主题并重新渲染。 */
   async function setTheme(themeKey, renderOptions) {
-    const resolved = resolveTheme(themeKey);
+    const resolved = resolveInstanceTheme(themeKey);
     if (resolved.key !== currentThemeKey) {
       currentThemeKey = resolved.key;
     }
@@ -1256,6 +1277,9 @@ function createDiagram(container, mermaidText, options) {
  *     （以指针位置为中心），默认 `true`；设为 `false` 可关闭
  *   - `autoTheme` `<boolean>`：是否根据系统/浏览器深浅色模式自动切换
  *     深色/浅色主题，默认 `false`；设为 `true` 开启，系统模式变化时自动跟随
+ *   - `customThemes` `<object>`：用户自定义配色方案，格式
+ *     `{ [key]: { label, background, highlight, mermaid } }`，
+ *     会合并进内置主题，可通过 `theme` / `setTheme(key)` 使用
  *   - `onZoomChange(level)` / `onRendered(svg)` / `onError(message)` 等回调
  * @returns {object} 控制句柄（含 render / zoom / highlight / destroy 等）
  */

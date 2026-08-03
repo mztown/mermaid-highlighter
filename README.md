@@ -62,6 +62,9 @@ const svg = await renderMermaid('graph TD;\n A-->B;', { theme: 'dark' });
     设为 `false` 可关闭
   - `autoTheme`：是否根据系统/浏览器深浅色模式自动切换深色/浅色主题，默认 `false`；
     设为 `true` 开启，系统模式变化时图表自动跟随（深色 ↔ 浅色）
+  - `customThemes`：用户自定义配色方案，格式
+    `{ [key]: { label, background, highlight, mermaid } }`，会合并进内置主题，
+    可通过 `theme` / `setTheme(key)` 使用
   - `onZoomChange(level)`：缩放比例变化回调
   - `onRendered(svg)`：渲染完成回调
   - `onError(message)`：渲染出错回调
@@ -91,6 +94,30 @@ const svg = await renderMermaid('graph TD;\n A-->B;', { theme: 'dark' });
 
 配色方案通过 mermaid 的 `themeVariables` 控制渲染主体配色，并同步更新画布背景与
 节点高亮（`is-active` 发光）颜色。
+
+**自定义配色方案**：通过 `customThemes` 传入自定义主题，会合并进内置主题，
+可用 `theme` / `setTheme(key)` 使用：
+
+```js
+const diagram = MermaidHighlighter.renderToContainer(el, text, {
+  customThemes: {
+    ocean: {
+      label: '海洋绿',
+      background: '#f0fdf4',        // 容器背景
+      highlight: '#16a34a',         // 高亮发光色
+      mermaid: {                    // mermaid themeVariables 配置
+        theme: 'base',
+        themeVariables: {
+          primaryColor: '#dcfce7',
+          primaryTextColor: '#14532d',
+          primaryBorderColor: '#16a34a',
+        },
+      },
+    },
+  },
+  theme: 'ocean',                   // 直接使用自定义主题
+});
+```
 
 浏览器用法示例（HTML 页面只需引入 `index.js`）：
 
