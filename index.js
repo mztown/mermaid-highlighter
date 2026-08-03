@@ -590,8 +590,54 @@ function createDiagram(container, mermaidText, options) {
   const cfg = Object.assign({}, options);
 
   // ---- 配色主题 ----
-  // 当前主题 key（默认取 options.theme 或默认主题）
-  let currentThemeKey = resolveTheme(cfg.theme).key;
+  // 是否根据系统/浏览器深浅色模式自动调整（options.autoTheme，默认关闭）
+  const autoTheme = cfg.autoTheme === true;
+  // 当前主题 key（默认取 options.theme 或默认主题；若 autoTheme 开启则按系统模式）
+  let currentThemeKey = autoTheme
+    ? getSystemThemeKey()
+    : resolveTheme(cfg.theme).key;
+
+  // 系统深浅色变化监听引用（供 destroy 时移除）
+  let colorSchemeQuery = null;
+  let colorSchemeListener = null;
+
+  /** 根据系统/浏览器 prefers-color-scheme 返回 dark 或 light。 */
+  function getSystemThemeKey() {
+    if (
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function'
+    ) {
+      const mq = window.matchMedia('(prefers-color-scheme: dark)');
+      if (mq && mq.matches) return 'dark';
+    }
+    return 'light';
+  }
+
+  /** 开启系统深浅色自动跟随：监听变化并重渲染。 */
+  function enableAutoTheme() {
+    if (!autoTheme) return;
+    if (
+      typeof window === 'undefined' ||
+      typeof window.matchMedia !== 'function'
+    ) {
+      return;
+    }
+    try {
+      colorSchemeQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    } catch (_) {
+      return;
+    }
+    if (!colorSchemeQuery || typeof colorSchemeQuery.addEventListener !== 'function') {
+      return;
+    }
+    colorSchemeListener = function () {
+      const target = getSystemThemeKey();
+      if (target !== currentThemeKey) {
+        setTheme(target);
+      }
+    };
+    colorSchemeQuery.addEventListener('change', colorSchemeListener);
+  }
 
   // 构造传给 mermaid 的渲染配置：主题 mermaid 配置 + 用户自定义 mermaid 配置
   function buildMermaidConfig() {
@@ -1145,6 +1191,16 @@ function createDiagram(container, mermaidText, options) {
       svg.removeEventListener('click', handleNodeClick);
     }
     root.removeEventListener('wheel', onPreviewWheel);
+    // 移除系统深浅色监听
+    if (colorSchemeQuery && colorSchemeListener) {
+      try {
+        colorSchemeQuery.removeEventListener('change', colorSchemeListener);
+      } catch (_) {
+        /* ignore */
+      }
+      colorSchemeQuery = null;
+      colorSchemeListener = null;
+    }
     // 仅清空容器内容与实例状态，不删除传入的容器 DOM。
     root.innerHTML = '';
     graphModel = null;
@@ -1160,6 +1216,9 @@ function createDiagram(container, mermaidText, options) {
       showMessage(err && err.message ? err.message : String(err), true);
     });
   }
+
+  // 开启系统/浏览器深浅色自动跟随（若启用）
+  enableAutoTheme();
 
   return {
     root,
@@ -1195,6 +1254,8 @@ function createDiagram(container, mermaidText, options) {
  * @param {object} [options] 可选配置
  *   - `enableScrollZoom` `<boolean>`：是否允许鼠标滚轮直接缩放
  *     （以指针位置为中心），默认 `true`；设为 `false` 可关闭
+ *   - `autoTheme` `<boolean>`：是否根据系统/浏览器深浅色模式自动切换
+ *     深色/浅色主题，默认 `false`；设为 `true` 开启，系统模式变化时自动跟随
  *   - `onZoomChange(level)` / `onRendered(svg)` / `onError(message)` 等回调
  * @returns {object} 控制句柄（含 render / zoom / highlight / destroy 等）
  */
