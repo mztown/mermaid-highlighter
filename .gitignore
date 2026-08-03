@@ -60,3 +60,5 @@ _tmp*
 # ===== 缓存 =====
 .eslintcache
 .prettiercache
+showAndTell.html
+index.html

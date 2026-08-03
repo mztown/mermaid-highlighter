@@ -283,6 +283,12 @@ python -m http.server 8000
 
 随后浏览器访问 `http://localhost:8000/index.html`（或 serve 打印的地址）。
 
+## TODO
+
+ - [ ] 高光功能增加对edge注释的处理
+ - [ ] 允许拖拽节点位置
+ - [ ] 允许拖拽线条位置并保证箭头吸附在节点上
+
 ## License
 
 MIT
