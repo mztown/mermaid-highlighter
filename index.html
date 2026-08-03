@@ -380,8 +380,8 @@
     </section>
   </div>
 
-  <!-- mermaid-highlighter 独立模块（自动加载 mermaid，提供渲染 / 缩放 / 高亮能力） -->
-  <script src="index.js"></script>
+  <!-- mermaid-highlighter 独立模块（CDN 引入，自动加载 mermaid，提供渲染 / 缩放 / 高亮能力） -->
+  <script src="https://unpkg.com/mermaid-highlighter@1.0.1/index.js"></script>
 
   <script>
     (function () {
@@ -389,7 +389,7 @@
 
       var M = window.MermaidHighlighter;
       if (!M) {
-        console.error('MermaidHighlighter 未加载，请确认 index.js 已正确引入。');
+        console.error('MermaidHighlighter 未加载，请确认 CDN 引入正确。');
         return;
       }
 
@@ -442,6 +442,9 @@
           zoomLabel.textContent = Math.round(level * 100) + '%';
         },
         enableScrollZoom: false,
+        // 发布包不含 vendor，CDN 方式需显式指定 mermaid 构建地址
+        mermaidUrl:
+          'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js',
       });
 
       // 首次渲染

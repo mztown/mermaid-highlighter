@@ -30,17 +30,23 @@ const { renderMermaid } = require('mermaid-highlighter');
 
 ### 浏览器（即插即用）
 
-任意 HTML 页面只需引入 `index.js`（mermaid 会由模块自行动态加载），传入一个
-DOM 容器和 mermaid 文本即可渲染出可缩放、可交互高亮的图表：
+任意 HTML 页面只需引入模块（mermaid 会由模块自行动态加载），传入一个 DOM
+容器和 mermaid 文本即可渲染出可缩放、可交互高亮的图表。
+
+> **注意**：npm 发布包**不含** `vendor/` 目录，因此浏览器（非打包）方式必须通过
+> `options.mermaidUrl` 指定一个可用的 mermaid 构建地址（如 CDN）。
+
+#### 方式一：CDN 直接引入（最简单）
 
 ```html
+<!-- 只需引入本模块，mermaid 通过 mermaidUrl 由 CDN 自动加载 -->
+<script src="https://unpkg.com/mermaid-highlighter@1.0.1/index.js"></script>
 <div id="container" style="width: 600px; height: 400px;"></div>
-
-<script src="node_modules/mermaid-highlighter/index.js"></script>
 <script>
   const diagram = MermaidHighlighter.renderToContainer(
     document.getElementById('container'),
-    'graph TD;\n  A --> B;\n  B --> C;'
+    'graph TD;\n  A --> B;\n  B --> C;',
+    { mermaidUrl: 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js' }
   );
   // 缩放 / 高亮 / 配色 / 下载
   diagram.zoomIn();
@@ -50,7 +56,34 @@ DOM 容器和 mermaid 文本即可渲染出可缩放、可交互高亮的图表�
 </script>
 ```
 
-或使用打包工具（webpack / vite / rollup）：
+> 全局对象名为 `MermaidHighlighter`。CDN 地址可用 unpkg 或 jsdelivr：
+> - `https://unpkg.com/mermaid-highlighter@1.0.1/index.js`
+> - `https://cdn.jsdelivr.net/npm/mermaid-highlighter@1.0.1/index.js`
+
+#### 方式二：手动拷贝模块文件
+
+将 `index.js`（可连同 `index.mjs`、`index.d.ts`）拷贝到你的项目目录，然后按普通
+脚本引入；仍需通过 `mermaidUrl` 指定 mermaid 构建：
+
+```html
+<div id="container" style="width: 600px; height: 400px;"></div>
+<script src="index.js"></script>
+<script>
+  MermaidHighlighter.renderToContainer(
+    document.getElementById('container'),
+    'graph TD;\n  A --> B;',
+    { mermaidUrl: 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js' }
+  );
+</script>
+```
+
+若希望完全离线，可先把 mermaid 构建放到本地（如 `vendor/mermaid.min.js`），
+然后指定本地路径：`{ mermaidUrl: 'vendor/mermaid.min.js' }`。
+
+#### 方式三：打包工具（webpack / vite / rollup）
+
+使用打包工具时无需手动指定 `mermaidUrl`——模块会通过 `require('mermaid')`
+自动从项目的 `node_modules` 解析 mermaid：
 
 ```js
 import { renderToContainer } from 'mermaid-highlighter';
@@ -72,7 +105,9 @@ const svg = await renderMermaid('graph TD;\n A-->B;', { theme: 'dark' });
 
 ## 环境支持
 
-- **浏览器**：模块会**自行动态加载 mermaid**（默认从 `vendor/mermaid/mermaid.min.js` 加载），
+- **浏览器**：模块会**自行动态加载 mermaid**。打包工具方式默认从 `node_modules`
+  解析（`require('mermaid')`）；CDN / 手动拷贝方式则必须通过 `options.mermaidUrl`
+  指定构建地址（发布包不含 `vendor/`，默认路径仅适用于仓库内本地构建）。
   无需在 HTML 中单独引入 mermaid 脚本；直接使用传入容器对应的 DOM 渲染。
 - **Node.js（服务端）**：自动通过 `jsdom` 创建 DOM 环境进行渲染（需安装 `jsdom`），
   渲染完成后会自动清理注入的全局对象，避免影响同进程内其他代码。
@@ -83,7 +118,8 @@ const svg = await renderMermaid('graph TD;\n A-->B;', { theme: 'dark' });
 
 - `mermaidText` `<string>`：mermaid 语法文本（必填，非空，否则抛出 `TypeError`）。
 - `options` `<object>`：可选，mermaid 初始化配置；额外支持 `mermaidUrl` 指定浏览器端
-  mermaid 构建的加载路径（默认 `vendor/mermaid/mermaid.min.js`）。
+  mermaid 构建的加载路径（打包工具方式默认自动解析 `mermaid`，CDN/手动拷贝方式需显式
+  指定，见上文「浏览器（即插即用）」）。
 - 返回：`<Promise<string>>` 渲染后的完整 SVG 字符串。
 - 说明：mermaid v11 的 `render` 返回 `{ svg, diagramType, bindFunctions }` 对象，
   本方法已归一化为直接返回其中的 `svg` 字符串。
@@ -97,7 +133,8 @@ const svg = await renderMermaid('graph TD;\n A-->B;', { theme: 'dark' });
 - `mermaidText` `<string>`：mermaid 文本。
 - `options` `<object>`：可选配置，支持：
   - `theme`：配色方案 key（默认 `light`）
-  - `mermaidUrl`：mermaid 构建加载路径（默认 `vendor/mermaid/mermaid.min.js`）
+  - `mermaidUrl`：mermaid 构建加载路径（打包工具方式默认自动解析 `mermaid`；
+    CDN/手动拷贝方式需显式指定，如 jsdelivr / unpkg 的 mermaid@11 地址）
   - `mermaid`：额外的 mermaid 初始化配置（会合并进主题配置）
   - `enableScrollZoom`：是否允许鼠标滚轮直接缩放（以指针位置为中心），默认 `true`；
     设为 `false` 可关闭
@@ -212,14 +249,12 @@ const diagram = MermaidHighlighter.renderToContainer(el, text, {
 
 ### 离线资源
 
-mermaid 浏览器构建已本地化到 `vendor/mermaid/`（`mermaid.min.js` + `chunks/`），
-不再依赖 CDN。`index.js` 在浏览器中会**自动**通过 `<script>` 标签加载该构建，
-因此 HTML 页面无需手动引入 mermaid 脚本。
+仓库内为本地演示提供了离线 mermaid 构建 `vendor/mermaid/`（`mermaid.min.js` +
+`chunks/`），不依赖 CDN。注意：**该目录仅存在于源码仓库，不随 npm 包发布**。
+若需要完全离线部署，请自行放置 mermaid 构建并通过 `options.mermaidUrl` 指定，
+例如：`MermaidHighlighter.renderToContainer(el, text, { mermaidUrl: 'vendor/mermaid.min.js' })`。
 
-> 若 mermaid 构建位于其他路径，可通过 `options.mermaidUrl` 指定，例如：
-> `MermaidHighlighter.renderToContainer(el, text, { mermaidUrl: '/js/mermaid.min.js' })`
-
-> 已包含的 `vendor/mermaid` 来自 `node_modules/mermaid/dist`，如需重新生成：
+> 仓库内 `vendor/mermaid` 来自 `node_modules/mermaid/dist`，如需重新生成：
 > `Copy-Item node_modules/mermaid/dist/mermaid.min.js, node_modules/mermaid/dist/chunks -Destination vendor/mermaid -Recurse`
 
 ### 必须用本地服务器打开（重要）

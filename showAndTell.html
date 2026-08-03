@@ -4,9 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Mermaid Highlighter · 最小实现展示</title>
-  <!-- 本页仅引入 index.js，mermaid 由模块自行动态加载，
+  <!-- 本页仅引入 mermaid-highlighter（CDN），mermaid 由模块自行动态加载，
        所有渲染 / 缩放 / 高亮 / 配色 / 下载均由模块自身完成。 -->
-  <script src="index.js"></script>
+  <script src="https://unpkg.com/mermaid-highlighter@1.0.1/index.js"></script>
 </head>
 <body>
   <!-- 唯一的容器元素，图表将渲染于此 -->
@@ -19,7 +19,7 @@
       var M = window.MermaidHighlighter;
       if (!M) {
         document.body.textContent =
-          'MermaidHighlighter 未加载，请确认 index.js 已正确引入。';
+          'MermaidHighlighter 未加载，请确认 CDN 引入正确。';
         return;
       }
 
@@ -39,6 +39,9 @@
       var diagram = M.renderToContainer(container, MERMAID_TEXT, {
         theme: 'light',
         autoTheme: true,
+        // 发布包不含 vendor，CDN 方式需显式指定 mermaid 构建地址
+        mermaidUrl:
+          'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js',
       });
 
       // 保持引用，便于在控制台调试（可选）
