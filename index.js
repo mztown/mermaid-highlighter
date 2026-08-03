@@ -632,6 +632,11 @@ function createDiagram(container, mermaidText, options) {
   const MAX_ZOOM = 5;
   const ZOOM_STEP = 0.1;
   let zoomLevel = 1;
+  // 画布平移偏移（以指针为中心缩放时用于保持锚点）
+  let offsetX = 0;
+  let offsetY = 0;
+  // 是否允许直接鼠标滚轮缩放（可通过 options.enableScrollZoom 配置开关，默认开启）
+  const enableScrollZoom = cfg.enableScrollZoom !== false;
 
   // ---- 图结构 ----
   let graphModel = null;
@@ -824,24 +829,60 @@ function createDiagram(container, mermaidText, options) {
   }
 
   // ---- 缩放 ----
-  function applyZoom(level) {
-    zoomLevel = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, level));
+  /** 将当前缩放级别与偏移应用到画布 transform。 */
+  function applyTransform() {
     const canvas = getCanvas();
-    if (canvas) canvas.style.transform = 'scale(' + zoomLevel + ')';
+    if (!canvas) return;
+    canvas.style.transform =
+      'translate(' + offsetX + 'px, ' + offsetY + 'px) scale(' + zoomLevel + ')';
     if (cfg.onZoomChange) cfg.onZoomChange(zoomLevel);
   }
-  function setZoom(level) {
-    applyZoom(level);
+
+  /** 设置缩放级别（以容器左上角为锚点）。 */
+  function applyZoom(level) {
+    const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, level));
+    if (next === zoomLevel) return zoomLevel;
+    zoomLevel = next;
+    applyTransform();
     return zoomLevel;
   }
+
+  /**
+   * 以指定指针位置为锚点缩放。
+   * @param {number} nextLevel 目标缩放级别
+   * @param {number} px 指针相对容器的 x（px）
+   * @param {number} py 指针相对容器的 y（px）
+   */
+  function applyZoomAt(nextLevel, px, py) {
+    const prev = zoomLevel;
+    const clamped = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, nextLevel));
+    if (clamped === prev) return zoomLevel;
+    // 保持指针下的内容点不动：
+    //  内容点在画布坐标 (cx, cy) = ((px - offsetX)/prev, (py - offsetY)/prev)
+    //  缩放后需 offsetX' = px - cx * clamped
+    const ratio = clamped / prev;
+    offsetX = px - ((px - offsetX) * ratio);
+    offsetY = py - ((py - offsetY) * ratio);
+    zoomLevel = clamped;
+    applyTransform();
+    return zoomLevel;
+  }
+
+  function setZoom(level) {
+    return applyZoom(level);
+  }
   function zoomIn() {
-    applyZoom(zoomLevel + ZOOM_STEP);
+    return applyZoom(zoomLevel + ZOOM_STEP);
   }
   function zoomOut() {
-    applyZoom(zoomLevel - ZOOM_STEP);
+    return applyZoom(zoomLevel - ZOOM_STEP);
   }
   function resetZoom() {
-    applyZoom(1);
+    zoomLevel = 1;
+    offsetX = 0;
+    offsetY = 0;
+    applyTransform();
+    return zoomLevel;
   }
   function getZoom() {
     return zoomLevel;
@@ -1078,11 +1119,22 @@ function createDiagram(container, mermaidText, options) {
   }
 
   // ---- 缩放交互事件 ----
+  /**
+   * 鼠标滚轮直接缩放（以指针所在位置为中心）。
+   * 可通过 options.enableScrollZoom 配置开关（默认开启）。
+   */
   function onPreviewWheel(e) {
-    if (!e.ctrlKey && !e.metaKey) return;
+    if (!enableScrollZoom) return;
+    // 直接滚轮缩放；若用户按住 Ctrl/⌘，浏览器页面缩放由浏览器接管，这里不做处理。
     e.preventDefault();
-    if (e.deltaY < 0) zoomIn();
-    else zoomOut();
+
+    // 计算指针相对容器的位置
+    const rect = root.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+
+    const factor = e.deltaY < 0 ? 1 + ZOOM_STEP : 1 - ZOOM_STEP;
+    applyZoomAt(zoomLevel * factor, px, py);
   }
 
   // ---- 销毁 ----
@@ -1098,7 +1150,7 @@ function createDiagram(container, mermaidText, options) {
     graphModel = null;
   }
 
-  // 绑定容器级滚轮缩放（Ctrl/⌘ + 滚轮）
+  // 绑定容器级滚轮缩放
   root.addEventListener('wheel', onPreviewWheel, { passive: false });
 
   // 初始渲染
@@ -1140,7 +1192,10 @@ function createDiagram(container, mermaidText, options) {
  *
  * @param {HTMLElement} container 目标容器元素
  * @param {string} mermaidText mermaid 文本
- * @param {object} [options] 可选配置 { onZoomChange, onRendered, onError }
+ * @param {object} [options] 可选配置
+ *   - `enableScrollZoom` `<boolean>`：是否允许鼠标滚轮直接缩放
+ *     （以指针位置为中心），默认 `true`；设为 `false` 可关闭
+ *   - `onZoomChange(level)` / `onRendered(svg)` / `onError(message)` 等回调
  * @returns {object} 控制句柄（含 render / zoom / highlight / destroy 等）
  */
 function renderToContainer(container, mermaidText, options) {

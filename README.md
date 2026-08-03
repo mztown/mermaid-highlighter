@@ -58,6 +58,8 @@ const svg = await renderMermaid('graph TD;\n A-->B;', { theme: 'dark' });
   - `theme`：配色方案 key（默认 `light`）
   - `mermaidUrl`：mermaid 构建加载路径（默认 `vendor/mermaid/mermaid.min.js`）
   - `mermaid`：额外的 mermaid 初始化配置（会合并进主题配置）
+  - `enableScrollZoom`：是否允许鼠标滚轮直接缩放（以指针位置为中心），默认 `true`；
+    设为 `false` 可关闭
   - `onZoomChange(level)`：缩放比例变化回调
   - `onRendered(svg)`：渲染完成回调
   - `onError(message)`：渲染出错回调
