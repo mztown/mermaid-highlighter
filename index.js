@@ -324,15 +324,21 @@ const MODULE_CSS = `
     transform-origin: 0 0;
     transition: transform 0.15s ease;
   }
-  /* 各主题：canvas 上的主题 class 提供高亮色（背景色由容器内联样式控制） */
+  /* 各主题：canvas 上的主题 class 提供高亮色与文字色（背景色由容器内联样式控制） */
+  .mermaid-highlighter-canvas {
+    --mh-text: #1f2328;
+  }
   .mermaid-highlighter-canvas.mh-theme-light {
     --mh-highlight: #2f81f7;
+    --mh-text: #1f2328;
   }
   .mermaid-highlighter-canvas.mh-theme-dark {
-    --mh-highlight: #f85149;
+  A-- 55-->D-->E[结束]
+    --mh-text: #f0f6fc;
   }
   .mermaid-highlighter-canvas.mh-theme-business {
     --mh-highlight: #0e7490;
+    --mh-text: #0b1f33;
   }
   .mermaid-highlighter-canvas svg .node {
     cursor: pointer;
@@ -355,6 +361,21 @@ const MODULE_CSS = `
   .mermaid-highlighter-canvas svg.is-dimmed .edgePaths .flowchart-link.is-relevant {
     opacity: 1;
     filter: none;
+  }
+  /* 边的文本：明暗程度与所在边保持一致（相关边文本正常，非相关边文本下沉） */
+  .mermaid-highlighter-canvas svg.is-dimmed .edgeLabels .edgeLabel:not(.is-relevant) {
+    opacity: 0.18;
+    filter: grayscale(1);
+  }
+  /* 相关边文本：group 级负责亮度（作用于整个标签块，含背景） */
+  .mermaid-highlighter-canvas svg.is-dimmed .edgeLabels .edgeLabel.is-relevant {
+    opacity: 1;
+    filter: none;
+  }
+  /* 相关边文本文字：仅负责加重文字颜色（避免与上方 group 级规则重复触发同属性） */
+  .mermaid-highlighter-canvas svg.is-dimmed .edgeLabels .edgeLabel.is-relevant p {
+    color: var(--mh-text, #1f2328);
+    font-weight: 600;
   }
   .mermaid-highlighter-empty,
   .mermaid-highlighter-error {
@@ -892,6 +913,35 @@ function createDiagram(container, mermaidText, options) {
         p.style.filter = 'grayscale(1)';
       }
     }
+    // 边的文本：与所在边保持一致
+    const labels = svgClone.querySelectorAll('.edgeLabels .edgeLabel');
+    for (let k = 0; k < labels.length; k++) {
+      const l = labels[k];
+      if (dimmed && !l.classList.contains('is-relevant')) {
+        l.style.opacity = '0.18';
+        l.style.filter = 'grayscale(1)';
+      } else if (l.classList.contains('is-relevant')) {
+        l.style.opacity = '1';
+        l.style.filter = 'none';
+        // 仅对文字 p 加重颜色，避免与外层 group 的 opacity/filter 重复设置
+        const textColor = getMhTextColor();
+        const pEls = l.querySelectorAll('p');
+        for (let t = 0; t < pEls.length; t++) {
+          pEls[t].style.color = textColor;
+          pEls[t].style.fontWeight = '600';
+        }
+      }
+    }
+  }
+
+  // 读取当前主题的文字色（用于导出时保持与页面一致的重色文字）
+  function getMhTextColor() {
+    const canvas = container.querySelector('.mermaid-highlighter-canvas');
+    if (canvas) {
+      const v = getComputedStyle(canvas).getPropertyValue('--mh-text');
+      if (v && v.trim()) return v.trim();
+    }
+    return '#1f2328';
   }
 
   /**
@@ -1177,6 +1227,39 @@ function createDiagram(container, mermaidText, options) {
     graph.edgePaths.forEach((ep) => {
       if (relevantEdgeKeys[ep.key]) ep.path.classList.add('is-relevant');
     });
+
+    // 边的文本：明暗程度与所在边保持一致。
+    // 关联方式：mermaid 生成的边文本结构为 <g class="edgeLabel"><g class="label"
+    // data-id="L_B_C_0">...</g></g>，其中 data-id 与边路径的 data-id 完全一致，
+    // 归一化后（B_C）与相关边 key 比对即可判定该边文本是否属于相关边。
+    // 注意：mermaid 边文本结构里，外层是 SVG <g class="edgeLabel">，其内部
+    // （foreignObject 中）还有一个 HTML <span class="edgeLabel">。两者都会被
+    // '.edgeLabels .edgeLabel' 选中。外层 g 有 [data-id] 可用于判定相关性；
+    // 内部 span 没有 [data-id]，必须跟随外层一起标记 is-relevant，
+    // 否则会被 :not(.is-relevant) 规则误判为无关文本而变灰。
+    const labels = svg.querySelectorAll('.edgeLabels > g.edgeLabel');
+    for (let k = 0; k < labels.length; k++) {
+      const label = labels[k];
+      const dataId = label.querySelector('[data-id]');
+      if (!dataId) continue;
+      const lk = edgeLabelKey(dataId.getAttribute('data-id'));
+      if (lk && relevantEdgeKeys[lk]) {
+        label.classList.add('is-relevant');
+        // 同步标记该标签块内部的所有 edgeLabel（含 HTML span），避免被灰化
+        const innerLabels = label.querySelectorAll('[class*="edgeLabel"]');
+        for (let x = 0; x < innerLabels.length; x++) {
+          innerLabels[x].classList.add('is-relevant');
+        }
+      }
+    }
+  }
+
+  // 将 mermaid 边文本 / 边路径的 data-id（如 L_B_C_0）归一化为边 key 格式：
+  // 去掉 L_ 前缀与尾部 _数字，得到 B_C（与 ep.key 一致）。
+  function edgeLabelKey(id) {
+    let k = String(id || '').replace(/^L_/i, '');
+    k = k.replace(/_\d+$/, '');
+    return k;
   }
 
   /** 清除所有高亮状态。 */
@@ -1191,6 +1274,10 @@ function createDiagram(container, mermaidText, options) {
     const paths = svg.querySelectorAll('path.is-relevant');
     for (let j = 0; j < paths.length; j++) {
       paths[j].classList.remove('is-relevant');
+    }
+    const labels = svg.querySelectorAll('.edgeLabel.is-relevant');
+    for (let k = 0; k < labels.length; k++) {
+      labels[k].classList.remove('is-relevant');
     }
   }
 
