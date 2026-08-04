@@ -3,6 +3,13 @@
 将 mermaid 文本渲染为可缩放、可交互高亮 SVG 的即插即用（Plug-and-Play）模块。
 支持 Node 与浏览器双环境，带 TypeScript 类型声明。
 
+## 效果展示
+
+在线预览本模块的能力与页面效果：
+
+- [在线编辑器](https://mztown.github.io/editor) —— 左侧输入 mermaid 文本、右侧实时渲染的可视化编辑器
+- [展示板](https://mztown.github.io/displayBoard) —— 图表展示/展板页
+
 ## 安装
 
 ```bash
