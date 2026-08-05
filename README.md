@@ -1,54 +1,56 @@
 # mermaid-highlighter
 
-将 mermaid 文本渲染为可缩放、可交互高亮 SVG 的即插即用（Plug-and-Play）模块。
-支持 Node 与浏览器双环境，带 TypeScript 类型声明。
+A plug-and-play module that renders mermaid text into a zoomable, interactive, highlightable SVG.
+Works in both Node.js and the browser, with TypeScript type declarations included.
 
 ![demo](https://mztown.github.io/highlighting.svg)
 
-## 效果展示
+## Live Demos
 
-在线预览本模块的能力与页面效果：
+Preview the capabilities and page effects of this module online:
 
-- [在线编辑器](https://mztown.github.io/editor) —— 左侧输入 mermaid 文本、右侧实时渲染的可视化编辑器
-- [展示板](https://mztown.github.io/displayBoard) —— 图表展示/展板页
+- [Online Editor](https://mztown.github.io/editor) — a visual editor with mermaid text on the left and real-time rendering on the right
+- [Display Board](https://mztown.github.io/displayBoard) — a chart display / showcase board page
 
-## 安装
+## Installation
 
 ```bash
 npm install mermaid-highlighter
-# 若在 Node.js（服务端）环境使用，需额外安装 jsdom：
+# If you use it in Node.js (server-side), also install jsdom:
 npm install jsdom
 ```
 
-> 已通过 `exports` 提供 CommonJS / ESM / TypeScript 多入口，`import` 与 `require`
-> 均可直接使用。
+> Multiple entry points (CommonJS / ESM / TypeScript) are provided via `exports`,
+> so both `import` and `require` work out of the box.
 
-## 用法
+## Usage
 
-### Node.js（服务端）
+### Node.js (server-side)
 
 ```js
 const { renderMermaid } = require('mermaid-highlighter');
-// 或：import { renderMermaid } from 'mermaid-highlighter';
+// or: import { renderMermaid } from 'mermaid-highlighter';
 
 (async () => {
   const svg = await renderMermaid('graph TD;\n  A-->B;\n  B-->C;');
-  console.log(svg); // 完整 SVG 字符串
+  console.log(svg); // the full SVG string
 })();
 ```
 
-### 浏览器（即插即用）
+### Browser (plug-and-play)
 
-任意 HTML 页面只需引入模块（mermaid 会由模块自行动态加载），传入一个 DOM
-容器和 mermaid 文本即可渲染出可缩放、可交互高亮的图表。
+In any HTML page, just include the module (mermaid is loaded dynamically by the module
+itself), pass in a DOM container and some mermaid text, and you get a zoomable,
+interactive, highlightable chart.
 
-> **注意**：npm 发布包**不含** `vendor/` 目录，因此浏览器（非打包）方式必须通过
-> `options.mermaidUrl` 指定一个可用的 mermaid 构建地址（如 CDN）。
+> **Note**: the npm package does **not** include the `vendor/` directory, so in the
+> browser (non-bundler) scenario you must provide a usable mermaid build via
+> `options.mermaidUrl` (e.g. a CDN).
 
-#### 方式一：CDN 直接引入（最简单）
+#### Method 1: Include via CDN (simplest)
 
 ```html
-<!-- 只需引入本模块，mermaid 通过 mermaidUrl 由 CDN 自动加载 -->
+<!-- Only this module is needed; mermaid is loaded from CDN via mermaidUrl -->
 <script src="https://unpkg.com/mermaid-highlighter@1.0.1/index.js"></script>
 <div id="container" style="width: 600px; height: 400px;"></div>
 <script>
@@ -57,7 +59,7 @@ const { renderMermaid } = require('mermaid-highlighter');
     'graph TD;\n  A --> B;\n  B --> C;',
     { mermaidUrl: 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js' }
   );
-  // 缩放 / 高亮 / 配色 / 下载
+  // zoom / highlight / theme / download
   diagram.zoomIn();
   diagram.highlightNode('B');
   diagram.setTheme('dark');
@@ -65,14 +67,15 @@ const { renderMermaid } = require('mermaid-highlighter');
 </script>
 ```
 
-> 全局对象名为 `MermaidHighlighter`。CDN 地址可用 unpkg 或 jsdelivr：
+> The global object is named `MermaidHighlighter`. CDN URLs are available on unpkg or jsdelivr:
 > - `https://unpkg.com/mermaid-highlighter@1.0.1/index.js`
 > - `https://cdn.jsdelivr.net/npm/mermaid-highlighter@1.0.1/index.js`
 
-#### 方式二：手动拷贝模块文件
+#### Method 2: Copy the module files manually
 
-将 `index.js`（可连同 `index.mjs`、`index.d.ts`）拷贝到你的项目目录，然后按普通
-脚本引入；仍需通过 `mermaidUrl` 指定 mermaid 构建：
+Copy `index.js` (optionally together with `index.mjs`, `index.d.ts`) into your project
+directory, then include it as a normal script; you still need to specify a mermaid build
+via `mermaidUrl`:
 
 ```html
 <div id="container" style="width: 600px; height: 400px;"></div>
@@ -86,13 +89,13 @@ const { renderMermaid } = require('mermaid-highlighter');
 </script>
 ```
 
-若希望完全离线，可先把 mermaid 构建放到本地（如 `vendor/mermaid.min.js`），
-然后指定本地路径：`{ mermaidUrl: 'vendor/mermaid.min.js' }`。
+For a fully offline setup, first place a mermaid build locally (e.g. `vendor/mermaid.min.js`),
+then point to it with a local path: `{ mermaidUrl: 'vendor/mermaid.min.js' }`.
 
-#### 方式三：打包工具（webpack / vite / rollup）
+#### Method 3: Bundler (webpack / vite / rollup)
 
-使用打包工具时无需手动指定 `mermaidUrl`——模块会通过 `require('mermaid')`
-自动从项目的 `node_modules` 解析 mermaid：
+When using a bundler there is no need to set `mermaidUrl` manually — the module resolves
+mermaid automatically from your project's `node_modules` via `require('mermaid')`:
 
 ```js
 import { renderToContainer } from 'mermaid-highlighter';
@@ -104,10 +107,11 @@ const diagram = renderToContainer(
 );
 ```
 
-### YAML front-matter 自动忽略
+### YAML front-matter is ignored automatically
 
-若 mermaid 文本开头带有三条横杠包围的 YAML 头部元信息（例如编辑器导出的 `id`），
-渲染与高亮解析都会**自动忽略**这一段，无需手动删除：
+If the mermaid text begins with YAML header metadata enclosed by three dashes (e.g. an
+`id` exported from an editor), both rendering and highlight parsing **automatically ignore**
+that block — there is no need to remove it manually:
 
 ```text
 ---
@@ -117,95 +121,109 @@ graph TD;
   A --> B;
 ```
 
-### 自定义主题
+### Custom theme
 
-`renderMermaid(text, options)` 的第二个参数会透传给 `mermaid.initialize`：
+The second argument of `renderMermaid(text, options)` is passed through to
+`mermaid.initialize`:
 
 ```js
 const svg = await renderMermaid('graph TD;\n A-->B;', { theme: 'dark' });
 ```
 
-## 环境支持
+## Environment support
 
-- **浏览器**：模块会**自行动态加载 mermaid**。打包工具方式默认从 `node_modules`
-  解析（`require('mermaid')`）；CDN / 手动拷贝方式则必须通过 `options.mermaidUrl`
-  指定构建地址（发布包不含 `vendor/`，默认路径仅适用于仓库内本地构建）。
-  无需在 HTML 中单独引入 mermaid 脚本；直接使用传入容器对应的 DOM 渲染。
-- **Node.js（服务端）**：自动通过 `jsdom` 创建 DOM 环境进行渲染（需安装 `jsdom`），
-  渲染完成后会自动清理注入的全局对象，避免影响同进程内其他代码。
+- **Browser**: the module **loads mermaid dynamically by itself**. With a bundler it
+  resolves mermaid from `node_modules` (`require('mermaid')`) by default; with CDN /
+  manual-copy usage you must specify a build path via `options.mermaidUrl` (the published
+  package has no `vendor/`; the default path only works for a local in-repo build).
+  There is no need to include a mermaid script separately in HTML; rendering happens
+  directly against the DOM of the provided container.
+- **Node.js (server-side)**: a DOM environment is created automatically via `jsdom`
+  (requires `jsdom`). After rendering, the injected globals are cleaned up automatically
+  so they do not affect other code in the same process.
 
 ## API
 
 ### `renderMermaid(mermaidText, options?)`
 
-- `mermaidText` `<string>`：mermaid 语法文本（必填，非空，否则抛出 `TypeError`）。
-- `options` `<object>`：可选，mermaid 初始化配置；额外支持 `mermaidUrl` 指定浏览器端
-  mermaid 构建的加载路径（打包工具方式默认自动解析 `mermaid`，CDN/手动拷贝方式需显式
-  指定，见上文「浏览器（即插即用）」）。
-- 返回：`<Promise<string>>` 渲染后的完整 SVG 字符串。
-- 说明：mermaid v11 的 `render` 返回 `{ svg, diagramType, bindFunctions }` 对象，
-  本方法已归一化为直接返回其中的 `svg` 字符串。
+- `mermaidText` `<string>`: the mermaid syntax text (required; must be non-empty,
+  otherwise a `TypeError` is thrown).
+- `options` `<object>`: optional mermaid initialization config; additionally supports
+  `mermaidUrl` to specify the load path of the browser-side mermaid build (bundler mode
+  resolves `mermaid` automatically; CDN/manual-copy mode needs it explicitly, see
+  "Browser (plug-and-play)" above).
+- Returns: `<Promise<string>>` — the full rendered SVG string.
+- Note: mermaid v11's `render` returns `{ svg, diagramType, bindFunctions }`; this method
+  normalizes it to return just the `svg` string.
 
-### `renderToContainer(container, mermaidText, options?)`（浏览器）
+### `renderToContainer(container, mermaidText, options?)` (browser)
 
-**直接用传入的 mermaid 文本渲染传入的 DOM**，生成一个可缩放、可交互高亮的 mermaid 图。
-任意 HTML 页面**只需引入 `index.js`**（无需单独引入 mermaid）即可使用。
+**Renders the given mermaid text directly into the given DOM**, producing a zoomable,
+interactive, highlightable mermaid chart. Any HTML page **only needs to include
+`index.js`** (no separate mermaid include) to use it.
 
-- `container` `<HTMLElement>`：目标容器元素，渲染结果直接写入该元素。
-- `mermaidText` `<string>`：mermaid 文本。
-- `options` `<object>`：可选配置，支持：
-  - `theme`：配色方案 key（默认 `light`）
-  - `mermaidUrl`：mermaid 构建加载路径（打包工具方式默认自动解析 `mermaid`；
-    CDN/手动拷贝方式需显式指定，如 jsdelivr / unpkg 的 mermaid@11 地址）
-  - `mermaid`：额外的 mermaid 初始化配置（会合并进主题配置）
-  - `enableScrollZoom`：是否允许鼠标滚轮直接缩放（以指针位置为中心），默认 `true`；
-    设为 `false` 可关闭
-  - `autoTheme`：是否根据系统/浏览器深浅色模式自动切换深色/浅色主题，默认 `false`；
-    设为 `true` 开启，系统模式变化时图表自动跟随（深色 ↔ 浅色）
-  - `customThemes`：用户自定义配色方案，格式
-    `{ [key]: { label, background, highlight, mermaid } }`，会合并进内置主题，
-    可通过 `theme` / `setTheme(key)` 使用
-  - `onZoomChange(level)`：缩放比例变化回调
-  - `onRendered(svg)`：渲染完成回调
-  - `onError(message)`：渲染出错回调
-  - `onThemeChange(key)`：配色方案变化回调
-- 返回：`<object>` 控制句柄，包含：
-  - `render(text)` / `update(text)`：重新渲染
-  - `getSvg()`：获取当前 SVG 元素
-  - `getSvgString()`：获取当前 SVG 的字符串（含 XML 声明与命名空间）
-  - `downloadSvg(filename?)`：下载当前 SVG 图像（默认文件名 `mermaid-diagram.svg`）
-  - `zoomIn()` / `zoomOut()` / `resetZoom()` / `setZoom(level)` / `getZoom()`：缩放控制
-  - `highlightNode(nodeId)` / `clearHighlight()`：点击高亮控制
-  - `getTheme()` / `setTheme(key)` / `getThemes()`：配色方案控制
-  - `destroy()`：销毁实例并清理内容
+- `container` `<HTMLElement>`: the target container element; the rendered result is
+  written into this element.
+- `mermaidText` `<string>`: the mermaid text.
+- `options` `<object>`: optional config; supports:
+  - `theme`: color scheme key (default `light`)
+  - `mermaidUrl`: load path of the mermaid build (bundler mode resolves `mermaid`
+    automatically; CDN/manual-copy mode needs it explicitly, e.g. a jsdelivr / unpkg
+    mermaid@11 URL)
+  - `mermaid`: extra mermaid initialization config (merged into the theme config)
+  - `enableScrollZoom`: whether the mouse wheel can zoom directly (centered on the
+    pointer), default `true`; set to `false` to disable
+  - `autoTheme`: whether to automatically switch between dark/light themes based on the
+    system/browser color scheme, default `false`; when `true`, the chart follows system
+    changes automatically (dark ↔ light)
+  - `customThemes`: user-defined color schemes, format
+    `{ [key]: { label, background, highlight, mermaid } }`, merged into the built-in
+    themes and usable via `theme` / `setTheme(key)`
+  - `onZoomChange(level)`: zoom-level change callback
+  - `onRendered(svg)`: render-completed callback
+  - `onError(message)`: render-error callback
+  - `onThemeChange(key)`: theme-change callback
+- Returns: `<object>` control handle, including:
+  - `render(text)` / `update(text)`: re-render
+  - `getSvg()`: get the current SVG element
+  - `getSvgString()`: get the current SVG as a string (including XML declaration and
+    namespace)
+  - `downloadSvg(filename?)`: download the current SVG image (default file name
+    `mermaid-diagram.svg`)
+  - `zoomIn()` / `zoomOut()` / `resetZoom()` / `setZoom(level)` / `getZoom()`: zoom control
+  - `highlightNode(nodeId)` / `clearHighlight()`: click-highlight control
+  - `getTheme()` / `setTheme(key)` / `getThemes()`: color scheme control
+  - `destroy()`: destroy the instance and clean up content
 
-> 说明：`downloadSvg` 会先把当前高亮/变灰等状态固化为内联样式，再导出，
-> 因此下载的 `.svg` 文件在任意查看器中都能正确显示完整图表。
+> Note: `downloadSvg` first bakes the current highlight/dim states into inline styles
+> before exporting, so the downloaded `.svg` file renders the complete diagram correctly
+> in any viewer.
 
-#### 配色方案
+#### Color schemes
 
-内置三个默认配色方案，可通过 `theme` 选项或 `setTheme(key)` 切换：
+Three built-in color schemes are provided, switchable via the `theme` option or
+`setTheme(key)`:
 
-| key | 名称 | 背景 | 元素 | 高亮 |
-|-----|------|------|------|------|
-| `light` | 浅色经典 | 白 | 黑/深灰 | 蓝 |
-| `dark` | 深色经典 | 黑 | 白 | 红 |
-| `business` | 商务蓝 | 浅蓝灰 | 深蓝边 | 青蓝 |
+| key | Name | Background | Elements | Highlight |
+|-----|------|------------|----------|-----------|
+| `light` | Light Classic | White | Black / dark gray | Blue |
+| `dark` | Dark Classic | Black | White | Red |
+| `business` | Business Blue | Light blue-gray | Dark blue border | Cyan blue |
 
-配色方案通过 mermaid 的 `themeVariables` 控制渲染主体配色，并同步更新画布背景与
-节点高亮（`is-active` 发光）颜色。
+The schemes control the main body colors via mermaid's `themeVariables` and keep the canvas
+background and node highlight (`is-active` glow) colors in sync.
 
-**自定义配色方案**：通过 `customThemes` 传入自定义主题，会合并进内置主题，
-可用 `theme` / `setTheme(key)` 使用：
+**Custom color scheme**: pass a custom theme via `customThemes`; it is merged into the
+built-in themes and can be used with `theme` / `setTheme(key)`:
 
 ```js
 const diagram = MermaidHighlighter.renderToContainer(el, text, {
   customThemes: {
     ocean: {
-      label: '海洋绿',
-      background: '#f0fdf4',        // 容器背景
-      highlight: '#16a34a',         // 高亮发光色
-      mermaid: {                    // mermaid themeVariables 配置
+      label: 'Ocean Green',
+      background: '#f0fdf4',        // container background
+      highlight: '#16a34a',         // highlight glow color
+      mermaid: {                    // mermaid themeVariables config
         theme: 'base',
         themeVariables: {
           primaryColor: '#dcfce7',
@@ -215,88 +233,97 @@ const diagram = MermaidHighlighter.renderToContainer(el, text, {
       },
     },
   },
-  theme: 'ocean',                   // 直接使用自定义主题
+  theme: 'ocean',                   // use the custom theme directly
 });
 ```
 
-浏览器用法示例（HTML 页面只需引入 `index.js`）：
+Browser usage example (the HTML page only needs to include `index.js`):
 
 ```html
 <div id="container" style="width: 600px; height: 400px;"></div>
 
-<!-- 只需引入 index.js，mermaid 会被自动加载 -->
+<!-- Only index.js is needed; mermaid is loaded automatically -->
 <script src="index.js"></script>
 <script>
-  // 传入容器 + mermaid 文本，容器即被渲染为可缩放、可交互高亮的图表
+  // Pass a container + mermaid text; the container is rendered into a zoomable,
+  // interactive, highlightable chart
   const diagram = MermaidHighlighter.renderToContainer(
     document.getElementById('container'),
     'graph TD;\n  A --> B;\n  B --> C;'
   );
-  // 手动触发重新渲染
+  // Trigger a re-render manually
   diagram.render('graph LR;\n  X --> Y;');
-  // 缩放
+  // Zoom
   diagram.zoomIn();
-  // 高亮指定节点（其上下游）
+  // Highlight the upstream/downstream of a node
   diagram.highlightNode('B');
-  // 切换配色方案（light / dark / business）
+  // Switch color scheme (light / dark / business)
   diagram.setTheme('dark');
-  // 查看可用配色
+  // List available schemes
   console.log(diagram.getThemes());
-  // 下载当前 SVG（默认 mermaid-diagram.svg）
+  // Download the current SVG (default mermaid-diagram.svg)
   diagram.downloadSvg('my-diagram.svg');
 </script>
 ```
 
-> 说明：`renderToContainer` 仅在浏览器环境可用；Node 环境请使用 `renderMermaid`。
+> Note: `renderToContainer` is only available in the browser; use `renderMermaid` in a
+> Node.js environment.
 
-## 可视化编辑页面（`index.html`）
+## Visual editor page (`index.html`)
 
-页面为离线可用的编辑器，核心交互如下：
+This page is an offline-capable editor with the following core interactions:
 
-- 右侧 SVG 的**渲染 / 缩放 / 点击高亮**均委托给 `index.js` 的
-  `renderToContainer`，页面本身只负责布局与编辑器交互。
+- The **render / zoom / click-highlight** of the right-hand SVG are all delegated to
+  `index.js`'s `renderToContainer`; the page itself only handles layout and editor
+  interaction.
 
-- **顶部工具栏**：标题 + 状态提示 + 视图模式切换按钮（分栏 / 仅左侧 / 仅右侧）。
-- **左右分栏**：中间分隔条可拖拽调整两侧比例（限制在 15% ~ 85% 之间）。
-- **仅显示单侧**：通过工具栏右侧按钮，可一键切换为仅显示左侧或仅显示右侧。
-- **自动渲染**：左侧文本编辑器停止输入 **2 秒** 后，自动将文本交给 mermaid
-  渲染，并把结果 SVG 显示到右侧容器。
-- **点击高亮上下游**（仅 `graph` / `flowchart` 图生效）：点击图中某个节点，
-  会向上游（指向它的节点）和下游（它指向的节点）查找所有关联节点及连线，
-  其余所有节点与连线变浅灰色；再次点击该节点或点击空白处可取消高亮。
-  - 兼容 mermaid 所有节点形状（矩形/菱形/圆形/圆柱/六边形/平行四边形等）与
-    纯 id 节点（无名称）。
-  - 兼容所有连线类型（`-->`、`---`、`-.->`、`==>` 等）、连线注释、以及连线
-    与注释前后有无空格的各种写法。
+- **Top toolbar**: title + status hint + view-mode switch buttons (split / left only /
+  right only).
+- **Left-right split**: the middle divider can be dragged to adjust the two panes'
+  ratio (clamped between 15% and 85%).
+- **Single-pane display**: via the buttons on the right side of the toolbar, you can
+  switch to showing only the left or only the right pane.
+- **Auto render**: 2 seconds after the left editor stops accepting input, the text is
+  handed to mermaid for rendering and the resulting SVG is shown in the right container.
+- **Click to highlight upstream/downstream** (only works for `graph` / `flowchart`):
+  clicking a node finds all related nodes and edges upstream (nodes pointing to it) and
+  downstream (nodes it points to); all other nodes and edges are dimmed to a light gray.
+  Clicking the node again or clicking empty space cancels the highlight.
+  - Supports all mermaid node shapes (rectangle/diamond/circle/cylinder/hexagon/
+    parallelogram, etc.) and plain-id nodes (with no label).
+  - Supports all edge types (`-->`, `---`, `-.->`, `==>`, etc.), edge labels, and various
+    spacings around the edge arrow / label.
 
-### 离线资源
+### Offline assets
 
-仓库内为本地演示提供了离线 mermaid 构建 `vendor/mermaid/`（`mermaid.min.js` +
-`chunks/`），不依赖 CDN。注意：**该目录仅存在于源码仓库，不随 npm 包发布**。
-若需要完全离线部署，请自行放置 mermaid 构建并通过 `options.mermaidUrl` 指定，
-例如：`MermaidHighlighter.renderToContainer(el, text, { mermaidUrl: 'vendor/mermaid.min.js' })`。
+The repo ships an offline mermaid build at `vendor/mermaid/` (`mermaid.min.js` +
+`chunks/`) for local demos, with no CDN dependency. Note: **this directory exists only in
+the source repo and is not published to npm**. For a fully offline deployment, place a
+mermaid build yourself and point to it via `options.mermaidUrl`, e.g.:
+`MermaidHighlighter.renderToContainer(el, text, { mermaidUrl: 'vendor/mermaid.min.js' })`.
 
-> 仓库内 `vendor/mermaid` 来自 `node_modules/mermaid/dist`，如需重新生成：
+> The repo's `vendor/mermaid` comes from `node_modules/mermaid/dist`; to regenerate it:
 > `Copy-Item node_modules/mermaid/dist/mermaid.min.js, node_modules/mermaid/dist/chunks -Destination vendor/mermaid -Recurse`
 
-### 必须用本地服务器打开（重要）
+### Must be opened with a local server (important)
 
-建议在项目目录启动一个本地静态服务器，然后用 `http://` 访问：
+It is recommended to start a local static server in the project directory, then access it
+via `http://`:
 
 ```bash
-# 方式一：Node
+# Option 1: Node
 npx serve
-# 方式二：Python 3
+# Option 2: Python 3
 python -m http.server 8000
 ```
 
-随后浏览器访问 `http://localhost:8000/index.html`（或 serve 打印的地址）。
+Then open `http://localhost:8000/index.html` in your browser (or the address printed by serve).
 
 ## TODO
 
- - [x] 高光功能增加对edge注释的处理
- - [ ] 允许拖拽节点位置
- - [ ] 允许拖拽线条位置并保证箭头吸附在节点上
+ - [x] Add support for handling edge labels in the highlight feature
+ - [ ] Allow dragging node positions
+ - [ ] Allow dragging edge lines and keep arrowheads snapped to nodes
 
 ## License
 
