@@ -3,7 +3,8 @@ node_modules/
 
 # ===== 离线演示（Git 上不需要离线演示功能） =====
 vendor/
-*.html
+index.html
+showAndTell.html
 
 # ===== 构建产物 =====
 dist/
