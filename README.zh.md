@@ -5,6 +5,8 @@
 
 ![demo](https://mztown.github.io/highlighting.svg)
 
+![action demo](https://mztown.github.io/MHdisplay.gif)
+
 ## 效果展示
 
 在线预览本模块的能力与页面效果：
