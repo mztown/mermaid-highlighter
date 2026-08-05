@@ -375,7 +375,7 @@ const MODULE_CSS = `
   /* 相关边文本文字：仅负责加重文字颜色（避免与上方 group 级规则重复触发同属性） */
   .mermaid-highlighter-canvas svg.is-dimmed .edgeLabels .edgeLabel.is-relevant p {
     color: var(--mh-text, #1f2328);
-    font-weight: 600;
+    font-weight: 400;
   }
   .mermaid-highlighter-empty,
   .mermaid-highlighter-error {
