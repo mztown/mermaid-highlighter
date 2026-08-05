@@ -7,6 +7,8 @@ Works in both Node.js and the browser, with TypeScript type declarations include
 
 ![demo](https://mztown.github.io/highlighting.svg)
 
+![action demo](https://mztown.github.io/MHdisplay.gif)
+
 ## Live Demos
 
 Preview the capabilities and page effects of this module online:
