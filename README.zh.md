@@ -1,4 +1,4 @@
-# mermaid-highlighter
+# Mermaid Highlighter
 
 将 mermaid 文本渲染为可缩放、可交互高亮 SVG 的即插即用（Plug-and-Play）模块。
 支持 Node 与浏览器双环境，带 TypeScript 类型声明。
