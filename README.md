@@ -1,4 +1,5 @@
-# mermaid-highlighter
+# Mermaid Highlighter
+
 - [中文说明](./README.zh.md)
 
 A plug-and-play module that renders mermaid text into a zoomable, interactive, highlightable SVG.
