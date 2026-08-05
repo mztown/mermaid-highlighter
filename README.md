@@ -1,5 +1,5 @@
 # mermaid-highlighter
-
+- [中文说明](./README.zh.md)
 A plug-and-play module that renders mermaid text into a zoomable, interactive, highlightable SVG.
 Works in both Node.js and the browser, with TypeScript type declarations included.
 
