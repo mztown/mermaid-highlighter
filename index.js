@@ -370,6 +370,19 @@ const MODULE_CSS = `
   .mermaid-highlighter-canvas svg.is-dimmed .edgeLabels .edgeLabel.is-relevant p {
     color: inherit;
   }
+  /* subgraph (cluster)：框与文本明暗与框内是否含相关节点关联。
+     含相关节点的 cluster 及其 label 保持正常亮度，否则整体下沉变暗。 */
+  .mermaid-highlighter-canvas svg.is-dimmed g.cluster:not(.is-relevant) {
+    opacity: 0.18;
+    filter: grayscale(1);
+  }
+  .mermaid-highlighter-canvas svg.is-dimmed g.cluster.is-relevant {
+    opacity: 1;
+    filter: none;
+  }
+  .mermaid-highlighter-canvas svg.is-dimmed g.cluster.is-relevant .cluster-label p {
+    color: inherit;
+  }
   .mermaid-highlighter-empty,
   .mermaid-highlighter-error {
     width: 100%;
@@ -608,25 +621,64 @@ function parseFlowchart(text) {
     .join('\n')
     .split(/[;\n]/);
 
+  // subgraph 结构：记录每个 subgraph id 包含的节点 id。
+  // 由于渲染出的 SVG 中 cluster 与 node 是平级 group（cluster 不包含 node），
+  // 只能通过文本解析建立 subgraph → 节点 的归属关系。
+  const subgraphs = {};      // { subgraphId: { nodes: {nodeId: true} } }
+  const stack = [];          // 当前 subgraph id 栈（支持嵌套）
+  const collectNodeIntoSubgraphs = (nid) => {
+    if (!nid) return;
+    for (const sid of stack) {
+      if (!subgraphs[sid]) subgraphs[sid] = { nodes: {} };
+      subgraphs[sid].nodes[nid] = true;
+    }
+  };
+
   for (const rawStmt of statements) {
     const stmt = rawStmt.trim();
     if (!stmt) continue;
-    if (
-      /^(graph|flowchart)\b/.test(stmt) ||
-      /^subgraph\b/.test(stmt) ||
-      /^end\b/.test(stmt) ||
-      /^(style|classDef|class|click|linkStyle|direction)\b/.test(stmt)
-    ) {
+    if (/^(graph|flowchart)\b/.test(stmt)) {
       continue;
     }
-    for (const edge of tryParseEdge(stmt)) {
-      nodes[edge[0]] = true;
-      nodes[edge[1]] = true;
-      edges.push(edge);
+    const subM = /^subgraph\b\s*([A-Za-z0-9_\u00a0-\uffff.-]+)/.exec(stmt);
+    if (subM) {
+      stack.push(subM[1]);
+      if (!subgraphs[subM[1]]) subgraphs[subM[1]] = { nodes: {} };
+      continue;
+    }
+    if (/^end\b/.test(stmt)) {
+      stack.pop();
+      continue;
+    }
+    if (/^(style|classDef|class|click|linkStyle|direction)\b/.test(stmt)) {
+      continue;
+    }
+    const parsedEdges = tryParseEdge(stmt);
+    if (parsedEdges.length > 0) {
+      for (const edge of parsedEdges) {
+        nodes[edge[0]] = true;
+        nodes[edge[1]] = true;
+        edges.push(edge);
+        collectNodeIntoSubgraphs(edge[0]);
+        collectNodeIntoSubgraphs(edge[1]);
+      }
+    } else {
+      // 不是边语句 → 尝试作为纯节点声明行（如 "A"、"B[text]"、"C{菱形}" 等），
+      // 使 subgraph 内部的独立节点也能被正确关联。
+      const nm = /^([A-Za-z][A-Za-z0-9_]*)/.exec(stmt);
+      if (nm) {
+        nodes[nm[1]] = true;
+        collectNodeIntoSubgraphs(nm[1]);
+      }
     }
   }
 
-  return { isFlowchart: true, nodes: Object.keys(nodes), edges };
+  return {
+    isFlowchart: true,
+    nodes: Object.keys(nodes),
+    edges,
+    subgraphs,
+  };
 }
 
 /**
@@ -920,6 +972,23 @@ function createDiagram(container, mermaidText, options) {
         const pEls = l.querySelectorAll('p');
         for (let t = 0; t < pEls.length; t++) {
           pEls[t].style.color = 'inherit';
+        }
+      }
+    }
+    // subgraph (cluster)：明暗与框内是否含相关节点关联
+    const clusters = svgClone.querySelectorAll('g.cluster');
+    for (let c = 0; c < clusters.length; c++) {
+      const cluster = clusters[c];
+      if (dimmed && !cluster.classList.contains('is-relevant')) {
+        cluster.style.opacity = '0.18';
+        cluster.style.filter = 'grayscale(1)';
+      } else if (cluster.classList.contains('is-relevant')) {
+        cluster.style.opacity = '1';
+        cluster.style.filter = 'none';
+        // cluster label 文字颜色继承，与节点一致
+        const cls = cluster.querySelectorAll('.cluster-label p');
+        for (let y = 0; y < cls.length; y++) {
+          cls[y].style.color = 'inherit';
         }
       }
     }
@@ -1233,6 +1302,63 @@ function createDiagram(container, mermaidText, options) {
         }
       }
     }
+
+    // subgraph (cluster)：若 cluster 对应的 subgraph 内存在相关节点（被高亮或其
+    // 相关上下游），则 cluster 及其 label 保持正常亮度；否则整体下沉变暗。
+    // 注意：渲染出的 SVG 中 cluster 与 node 是平级 group（cluster 不包含 node），
+    // 无法通过 DOM 包含关系判断，只能借助文本解析出的 subgraph → 节点映射来判定。
+    const subgraphById = graph.subgraphs || {};
+    // 【调试】输出 subgraph-节点映射、cluster id、relevantNodes，便于排查高亮问题
+    try {
+      /* eslint-disable no-console */
+      console.log('[MH-debug] subgraphById =', JSON.stringify(subgraphById, null, 2));
+      console.log('[MH-debug] relevantNodes =', JSON.stringify(relevantNodes));
+      console.log('[MH-debug] relevantEdges =', JSON.stringify(relevantEdges));
+      /* eslint-enable no-console */
+    } catch (_) { /* 忽略日志异常 */ }
+    const clusters = svg.querySelectorAll('g.cluster');
+    for (let c = 0; c < clusters.length; c++) {
+      const cluster = clusters[c];
+      const cid = cluster.getAttribute('id') || '';
+      // 找到与该 cluster 匹配的 subgraph id（cluster id 以 -<subgraphId> 结尾）
+      const sid = matchSubgraphId(cid, subgraphById);
+      try {
+        /* eslint-disable no-console */
+        console.log('[MH-debug] cluster id="' + cid + '" -> matched subgraph="' + sid + '"');
+        /* eslint-enable no-console */
+      } catch (_) {}
+      if (!sid) continue;
+      const sg = subgraphById[sid];
+      let hasRelevant = false;
+      for (const nid in sg.nodes) {
+        if (relevantNodes[nid]) { hasRelevant = true; break; }
+      }
+      try {
+        /* eslint-disable no-console */
+        console.log('[MH-debug] subgraph "' + sid + '" nodes =', JSON.stringify(sg.nodes), '-> hasRelevant =', hasRelevant);
+        /* eslint-enable no-console */
+      } catch (_) {}
+      if (hasRelevant) {
+        cluster.classList.add('is-relevant');
+        // 同步标记 cluster 内所有 cluster-label（含 HTML span），避免被灰化
+        const innerLabels = cluster.querySelectorAll('[class*="cluster-label"]');
+        for (let x = 0; x < innerLabels.length; x++) {
+          innerLabels[x].classList.add('is-relevant');
+        }
+      }
+    }
+  }
+
+  // 从 cluster 元素的 id（形如 <svgId>-<subgraphId>）中，找出对应的 subgraph id。
+  // 用最长匹配避免 subgraph id 互为前缀时误判。
+  function matchSubgraphId(clusterId, subgraphById) {
+    let best = '';
+    for (const sid in subgraphById) {
+      if (clusterId === sid || clusterId.endsWith('-' + sid)) {
+        if (sid.length > best.length) best = sid;
+      }
+    }
+    return best;
   }
 
   // 将 mermaid 边文本 / 边路径的 data-id（如 L_B_C_0）归一化为边 key 格式：
@@ -1259,6 +1385,15 @@ function createDiagram(container, mermaidText, options) {
     const labels = svg.querySelectorAll('.edgeLabel.is-relevant');
     for (let k = 0; k < labels.length; k++) {
       labels[k].classList.remove('is-relevant');
+    }
+    // 清除 subgraph (cluster) 及其 label 的高亮状态
+    const clusters = svg.querySelectorAll('g.cluster.is-relevant');
+    for (let c = 0; c < clusters.length; c++) {
+      clusters[c].classList.remove('is-relevant');
+    }
+    const clusterLabels = svg.querySelectorAll('.cluster-label.is-relevant');
+    for (let cl = 0; cl < clusterLabels.length; cl++) {
+      clusterLabels[cl].classList.remove('is-relevant');
     }
   }
 
