@@ -3,6 +3,8 @@
 将 mermaid 文本渲染为可缩放、可交互高亮 SVG 的即插即用（Plug-and-Play）模块。
 支持 Node 与浏览器双环境，带 TypeScript 类型声明。
 
+![demo](https://mztown.github.io/highlighting.svg)
+
 ## 效果展示
 
 在线预览本模块的能力与页面效果：
