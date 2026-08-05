@@ -330,10 +330,11 @@
         class="editor"
         spellcheck="false"
         placeholder="在此输入 mermaid 文本，例如：&#10;graph TD;&#10;  A-->B;&#10;  B-->C;&#10;停止输入 2 秒后自动渲染到右侧。"
-      >graph TD;
-  A[开始] --> B{是否完成?}
-  B -->|是| C[结束]
-  B -->|否| A
+      >flowchart LR
+  A[Start] --> B{Judging}
+  B -->|Y| C[Fin]
+  B -->|N| D(AlternateFin)
+  A --Path--> D
       </textarea>
     </section>
 
