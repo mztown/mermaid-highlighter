@@ -5,8 +5,9 @@
  *
  * 将 mermaid 文本渲染为 SVG 的独立模块，并提供：
  *  - 缩放（滚轮 / 按钮 / 键盘）
+ *  - 鼠标拖拽平移视口（放大后便于查看不同区域）
  *  - 点击节点高亮上游/下游
- * 两种能力。支持 CommonJS（Node）与浏览器 <script> 全局两种用法。
+ * 三种能力。支持 CommonJS（Node）与浏览器 <script> 全局两种用法。
  *
  * 在浏览器中，本模块会自行动态加载 mermaid 构建（默认从
  * `vendor/mermaid/mermaid.min.js` 加载），HTML 页面只需引入本脚本即可。
@@ -323,6 +324,16 @@ const MODULE_CSS = `
     display: block;
     transform-origin: 0 0;
     transition: transform 0.15s ease;
+  }
+  /* 拖拽平移时禁用过渡，保证跟手；显示抓取光标提示可拖动 */
+  .mermaid-highlighter-canvas.mh-panning {
+    transition: none;
+  }
+  .mermaid-highlighter-canvas {
+    cursor: grab;
+  }
+  .mermaid-highlighter-canvas.mh-panning {
+    cursor: grabbing;
   }
   /* 各主题：canvas 上的主题 class 提供高亮色（背景色由容器内联样式控制） */
   .mermaid-highlighter-canvas.mh-theme-light {
@@ -818,6 +829,8 @@ function createDiagram(container, mermaidText, options) {
   let offsetY = 0;
   // 是否允许直接鼠标滚轮缩放（可通过 options.enableScrollZoom 配置开关，默认开启）
   const enableScrollZoom = cfg.enableScrollZoom !== false;
+  // 是否允许按住鼠标左键拖动画布以平移视口（可通过 options.enableDragPan 配置开关，默认开启）
+  const enableDragPan = cfg.enableDragPan !== false;
 
   // ---- 图结构 ----
   let graphModel = null;
@@ -1156,6 +1169,11 @@ function createDiagram(container, mermaidText, options) {
 
   function handleNodeClick(e) {
     if (!graphModel) return;
+    // 拖拽平移后紧跟着触发的一次 click，不应被当作节点点击高亮。
+    if (panMoved) {
+      panMoved = false;
+      return;
+    }
     const g = e.target.closest
       ? e.target.closest('g.node')
       : findAncestorNode(e.target);
@@ -1438,6 +1456,78 @@ function createDiagram(container, mermaidText, options) {
     return render(lastText, renderOptions);
   }
 
+  // ---- 拖拽平移 ----
+  // 拖动画布以平移视口，避免放大后找不到想看的部分。
+  let panDragging = false;
+  let panLastX = 0;
+  let panLastY = 0;
+  // 标记本次拖拽是否产生实际位移，用于抑制拖拽结束后误触发的节点 click 高亮。
+  let panMoved = false;
+
+  /**
+   * 拖拽开始：记录起点，并标记拖拽中。
+   * @param {number} px 相对容器的 x（px）
+   * @param {number} py 相对容器的 y（px）
+   */
+  function panStart(px, py) {
+    panDragging = true;
+    panMoved = false;
+    panLastX = px;
+    panLastY = py;
+    const canvas = getCanvas();
+    if (canvas) canvas.classList.add('mh-panning');
+    root.style.cursor = 'grabbing';
+  }
+
+  /**
+   * 拖拽移动：按鼠标位移更新平移偏移。
+   * @param {number} px 相对容器的 x（px）
+   * @param {number} py 相对容器的 y（px）
+   */
+  function panMove(px, py) {
+    if (!panDragging) return;
+    const dx = px - panLastX;
+    const dy = py - panLastY;
+    if (dx !== 0 || dy !== 0) panMoved = true;
+    offsetX += dx;
+    offsetY += dy;
+    panLastX = px;
+    panLastY = py;
+    applyTransform();
+  }
+
+  /** 拖拽结束：清除状态。 */
+  function panEnd() {
+    if (!panDragging) return;
+    panDragging = false;
+    const canvas = getCanvas();
+    if (canvas) canvas.classList.remove('mh-panning');
+    root.style.cursor = '';
+  }
+
+  function onPointerDown(e) {
+    if (!enableDragPan) return;
+    // 仅响应鼠标左键拖拽（触屏拖动会触发页面滚动，这里只处理鼠标）
+    if (e.button !== 0) return;
+    panStart(
+      e.clientX - root.getBoundingClientRect().left,
+      e.clientY - root.getBoundingClientRect().top
+    );
+    e.preventDefault();
+  }
+
+  function onPointerMove(e) {
+    if (!panDragging) return;
+    panMove(
+      e.clientX - root.getBoundingClientRect().left,
+      e.clientY - root.getBoundingClientRect().top
+    );
+  }
+
+  function onPointerUp() {
+    panEnd();
+  }
+
   // ---- 缩放交互事件 ----
   /**
    * 鼠标滚轮直接缩放（以指针所在位置为中心）。
@@ -1460,11 +1550,16 @@ function createDiagram(container, mermaidText, options) {
   // ---- 销毁 ----
   function destroy() {
     renderToken++; // 使进行中的异步渲染失效
+    panEnd();
     const svg = getSvg();
     if (svg) {
       svg.removeEventListener('click', handleNodeClick);
     }
     root.removeEventListener('wheel', onPreviewWheel);
+    root.removeEventListener('pointerdown', onPointerDown);
+    root.removeEventListener('pointermove', onPointerMove);
+    root.removeEventListener('pointerup', onPointerUp);
+    root.removeEventListener('pointercancel', onPointerUp);
     // 移除系统深浅色监听
     if (colorSchemeQuery && colorSchemeListener) {
       try {
@@ -1482,6 +1577,11 @@ function createDiagram(container, mermaidText, options) {
 
   // 绑定容器级滚轮缩放
   root.addEventListener('wheel', onPreviewWheel, { passive: false });
+  // 绑定鼠标拖拽平移（pointer 事件，浏览器兼容性良好）
+  root.addEventListener('pointerdown', onPointerDown);
+  root.addEventListener('pointermove', onPointerMove);
+  root.addEventListener('pointerup', onPointerUp);
+  root.addEventListener('pointercancel', onPointerUp);
 
   // 初始渲染
   if (typeof mermaidText === 'string') {
@@ -1528,6 +1628,8 @@ function createDiagram(container, mermaidText, options) {
  * @param {object} [options] 可选配置
  *   - `enableScrollZoom` `<boolean>`：是否允许鼠标滚轮直接缩放
  *     （以指针位置为中心），默认 `true`；设为 `false` 可关闭
+ *   - `enableDragPan` `<boolean>`：是否允许按住鼠标左键拖动画布平移视口，
+ *     默认 `true`（放大后便于查看不同区域）；设为 `false` 可关闭
  *   - `autoTheme` `<boolean>`：是否根据系统/浏览器深浅色模式自动切换
  *     深色/浅色主题，默认 `false`；设为 `true` 开启，系统模式变化时自动跟随
  *   - `customThemes` `<object>`：用户自定义配色方案，格式

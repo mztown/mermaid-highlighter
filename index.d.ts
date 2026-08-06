@@ -32,6 +32,8 @@ export interface RenderOptions {
   autoTheme?: boolean;
   /** 是否允许鼠标滚轮直接缩放（以指针为中心，默认 true）。 */
   enableScrollZoom?: boolean;
+  /** 是否允许按住鼠标左键拖动画布以平移视口（默认 true，放大后便于查看不同区域）。 */
+  enableDragPan?: boolean;
   /** mermaid 构建加载路径（默认 vendor/mermaid/mermaid.min.js）。 */
   mermaidUrl?: string;
   /** 额外的 mermaid 初始化配置（合并进主题配置）。 */

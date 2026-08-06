@@ -177,6 +177,9 @@ interactive, highlightable mermaid chart. Any HTML page **only needs to include
   - `mermaid`: extra mermaid initialization config (merged into the theme config)
   - `enableScrollZoom`: whether the mouse wheel can zoom directly (centered on the
     pointer), default `true`; set to `false` to disable
+  - `enableDragPan`: whether to allow dragging the canvas with the left mouse button to
+    pan the viewport, default `true` (helpful for viewing different areas after zooming
+    in); set to `false` to disable
   - `autoTheme`: whether to automatically switch between dark/light themes based on the
     system/browser color scheme, default `false`; when `true`, the chart follows system
     changes automatically (dark ↔ light)
